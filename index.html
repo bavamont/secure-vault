@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Vault</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="node_modules/@fortawesome/fontawesome-free/css/all.min.css">
+</head>
+<body>
+    <div class="custom-title-bar">
+        <div class="title-bar-content">
+            <div class="app-icon">
+                <img src="assets/icon.svg" alt="Secure Vault" class="app-logo">
+            </div>
+            <div class="app-title" data-i18n="app.title">Secure Vault</div>
+        </div>
+        <div class="window-controls">
+            <button class="window-control minimize-btn" id="minimize-btn">
+                <i class="fas fa-window-minimize"></i>
+            </button>
+            <button class="window-control maximize-btn" id="maximize-btn">
+                <i class="fas fa-window-maximize"></i>
+            </button>
+            <button class="window-control close-btn" id="close-btn">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <div class="lock-screen" id="lock-screen">
+            <div class="lock-content">
+                <div class="lock-header">
+                    <img src="assets/logo.svg" alt="Secure Vault" class="lock-logo">
+                    <h1 data-i18n="app.title">Secure Vault</h1>
+                    <p data-i18n="lock.subtitle">Enter your master password to unlock your vault</p>
+                </div>
+
+                <div class="setup-form" id="setup-form" style="display: none;">
+                    <h2 data-i18n="setup.title">Setup Master Password</h2>
+                    <p data-i18n="setup.description">Create a strong master password to secure your vault</p>
+
+                    <div class="form-group">
+                        <label for="setup-password">
+                            <i class="fas fa-key"></i>
+                            <span data-i18n="setup.master_password">Master Password</span>
+                        </label>
+                        <div class="password-input-container">
+                            <input type="password" id="setup-password" data-i18n-placeholder="setup.enter_password">
+                            <button type="button" class="password-toggle" id="setup-password-toggle">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                        <div class="password-strength" id="setup-password-strength"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="setup-password-confirm">
+                            <i class="fas fa-key"></i>
+                            <span data-i18n="setup.confirm_password">Confirm Password</span>
+                        </label>
+                        <div class="password-input-container">
+                            <input type="password" id="setup-password-confirm" data-i18n-placeholder="setup.confirm_password">
+                            <button type="button" class="password-toggle" id="setup-password-confirm-toggle">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary btn-large" id="setup-vault-btn">
+                        <i class="fas fa-shield-alt"></i>
+                        <span data-i18n="setup.create_vault">Create Vault</span>
+                    </button>
+                </div>
+
+                <div class="unlock-form" id="unlock-form">
+                    <div class="form-group">
+                        <label for="master-password">
+                            <i class="fas fa-key"></i>
+                            <span data-i18n="lock.master_password">Master Password</span>
+                        </label>
+                        <div class="password-input-container">
+                            <input type="password" id="master-password" data-i18n-placeholder="lock.enter_password">
+                            <button type="button" class="password-toggle" id="master-password-toggle">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary btn-large" id="unlock-vault-btn">
+                        <i class="fas fa-unlock"></i>
+                        <span data-i18n="lock.unlock_vault">Unlock Vault</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <header class="app-header" id="app-header" style="display: none;">
+            <div class="header-content">
+                <div class="header-left">
+                    <h1><img src="assets/logo.svg" alt="Secure Vault" class="header-logo"> <span data-i18n="app.title">Secure Vault</span></h1>
+                    <p data-i18n="app.subtitle">Secure password manager and authenticator</p>
+                </div>
+                <div class="header-right">
+                    <button class="btn btn-sm btn-outline" id="lock-vault-btn">
+                        <i class="fas fa-lock"></i>
+                        <span data-i18n="header.lock_vault">Lock Vault</span>
+                    </button>
+                    <button class="btn btn-sm btn-outline" id="check-updates-btn">
+                        <i class="fas fa-sync-alt"></i>
+                        <span data-i18n="updater.check_updates">Check for Updates</span>
+                    </button>
+                    <select id="language-selector" class="language-selector">
+                        <option value="en">English</option>
+                        <option value="de">Deutsch</option>
+                    </select>
+                </div>
+            </div>
+        </header>
+
+        <main class="app-main" id="app-main" style="display: none;">
+            <nav class="sidebar">
+                <div class="sidebar-content">
+                    <div class="nav-section">
+                        <div class="nav-item active" data-tab="passwords">
+                            <i class="fas fa-key"></i>
+                            <span data-i18n="nav.passwords">Passwords</span>
+                            <div class="nav-tooltip" data-i18n="nav.passwords.tooltip">Manage your passwords</div>
+                        </div>
+                        <div class="nav-item" data-tab="authenticator">
+                            <i class="fas fa-mobile-alt"></i>
+                            <span data-i18n="nav.authenticator">Authenticator</span>
+                            <div class="nav-tooltip" data-i18n="nav.authenticator.tooltip">Two-factor authentication codes</div>
+                        </div>
+                        <div class="nav-item" data-tab="settings">
+                            <i class="fas fa-cogs"></i>
+                            <span data-i18n="nav.settings">Settings</span>
+                            <div class="nav-tooltip" data-i18n="nav.settings.tooltip">Application settings</div>
+                        </div>
+                        <div class="nav-item" data-tab="help">
+                            <i class="fas fa-question-circle"></i>
+                            <span data-i18n="nav.help">Help</span>
+                            <div class="nav-tooltip" data-i18n="nav.help.tooltip">Usage guide and documentation</div>
+                        </div>
+                    </div>
+                </div>
+            </nav>
+
+            <div class="content-area">
+                <div class="tab-content active" id="passwords-tab">
+                    <div class="page-header">
+                        <h2><i class="fas fa-key"></i> <span data-i18n="passwords.title">Password Manager</span></h2>
+                        <p data-i18n="passwords.subtitle">Securely store and manage your passwords</p>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-search"></i> <span data-i18n="passwords.search">Search & Actions</span></h3>
+                            <div class="password-actions">
+                                <button class="btn btn-primary" id="add-password-btn">
+                                    <i class="fas fa-plus"></i>
+                                    <span data-i18n="passwords.add_password">Add Password</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="search-container">
+                                <div class="search-input-container">
+                                    <i class="fas fa-search search-icon"></i>
+                                    <input type="text" id="password-search" data-i18n-placeholder="passwords.search_placeholder">
+                                </div>
+                                <div class="search-filters">
+                                    <select id="password-category-filter">
+                                        <option value="" data-i18n="passwords.all_categories">All Categories</option>
+                                        <option value="website" data-i18n="passwords.category_website">Website</option>
+                                        <option value="app" data-i18n="passwords.category_app">Application</option>
+                                        <option value="email" data-i18n="passwords.category_email">Email</option>
+                                        <option value="social" data-i18n="passwords.category_social">Social Media</option>
+                                        <option value="financial" data-i18n="passwords.category_financial">Financial</option>
+                                        <option value="other" data-i18n="passwords.category_other">Other</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-list"></i> <span data-i18n="passwords.your_passwords">Your Passwords</span></h3>
+                            <div class="password-stats">
+                                <span class="stat-item">
+                                    <span class="stat-label" data-i18n="passwords.total">Total:</span>
+                                    <span class="stat-value" id="password-count">0</span>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="password-list" id="password-list">
+                                <div class="empty-state" id="password-empty-state">
+                                    <i class="fas fa-key empty-icon"></i>
+                                    <h3 data-i18n="passwords.no_passwords">No passwords stored yet</h3>
+                                    <p data-i18n="passwords.add_first_password">Add your first password to get started</p>
+                                    <button class="btn btn-primary" id="add-first-password-btn">
+                                        <i class="fas fa-plus"></i>
+                                        <span data-i18n="passwords.add_password">Add Password</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="authenticator-tab">
+                    <div class="page-header">
+                        <h2><i class="fas fa-mobile-alt"></i> <span data-i18n="authenticator.title">Authenticator</span></h2>
+                        <p data-i18n="authenticator.subtitle">Two-factor authentication codes</p>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-plus"></i> <span data-i18n="authenticator.add_account">Add Account</span></h3>
+                            <div class="totp-actions">
+                                <button class="btn btn-primary" id="add-totp-btn">
+                                    <i class="fas fa-desktop"></i>
+                                    <span data-i18n="authenticator.scan_qr">Scan QR Code</span>
+                                </button>
+                                <button class="btn btn-outline" id="add-totp-manual-btn">
+                                    <i class="fas fa-keyboard"></i>
+                                    <span data-i18n="authenticator.manual_entry">Manual Entry</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <p data-i18n="authenticator.description">Add accounts to generate time-based one-time passwords (TOTP) for two-factor authentication</p>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-shield-alt"></i> <span data-i18n="authenticator.your_accounts">Your Accounts</span></h3>
+                            <div class="totp-stats">
+                                <span class="stat-item">
+                                    <span class="stat-label" data-i18n="authenticator.total">Total:</span>
+                                    <span class="stat-value" id="totp-count">0</span>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="totp-list" id="totp-list">
+                                <div class="empty-state" id="totp-empty-state">
+                                    <i class="fas fa-mobile-alt empty-icon"></i>
+                                    <h3 data-i18n="authenticator.no_accounts">No authenticator accounts yet</h3>
+                                    <p data-i18n="authenticator.add_first_account">Add your first account to get started</p>
+                                    <button class="btn btn-primary" id="add-first-totp-btn">
+                                        <i class="fas fa-desktop"></i>
+                                        <span data-i18n="authenticator.scan_qr">Scan QR Code</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="settings-tab">
+                    <div class="page-header">
+                        <h2><i class="fas fa-cogs"></i> <span data-i18n="settings.title">Settings</span></h2>
+                        <p data-i18n="settings.subtitle">Configure your vault and security preferences</p>
+                    </div>
+
+                    <div class="settings-grid">
+                        <div class="card settings-card">
+                            <div class="card-header">
+                                <h3><i class="fas fa-shield-alt"></i> <span data-i18n="settings.security">Security</span></h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <button class="btn btn-outline" id="change-master-password-btn">
+                                        <i class="fas fa-key"></i>
+                                        <span data-i18n="settings.change_master_password">Change Master Password</span>
+                                    </button>
+                                </div>
+
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="auto-lock">
+                                    <span class="checkbox-custom"></span>
+                                    <span data-i18n="settings.auto_lock">Auto-lock vault after inactivity</span>
+                                </label>
+
+                                <div class="form-group">
+                                    <label for="auto-lock-time">
+                                        <i class="fas fa-clock"></i>
+                                        <span data-i18n="settings.auto_lock_time">Auto-lock time (minutes)</span>
+                                    </label>
+                                    <select id="auto-lock-time">
+                                        <option value="5">5 minutes</option>
+                                        <option value="10">10 minutes</option>
+                                        <option value="15" selected>15 minutes</option>
+                                        <option value="30">30 minutes</option>
+                                        <option value="60">1 hour</option>
+                                    </select>
+                                </div>
+
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="clear-clipboard">
+                                    <span class="checkbox-custom"></span>
+                                    <span data-i18n="settings.clear_clipboard">Clear clipboard after copying</span>
+                                </label>
+
+                                <div class="form-group">
+                                    <label for="clipboard-timeout">
+                                        <i class="fas fa-clipboard"></i>
+                                        <span data-i18n="settings.clipboard_timeout">Clipboard timeout (seconds)</span>
+                                    </label>
+                                    <select id="clipboard-timeout">
+                                        <option value="10">10 seconds</option>
+                                        <option value="30" selected>30 seconds</option>
+                                        <option value="60">1 minute</option>
+                                        <option value="120">2 minutes</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card settings-card">
+                            <div class="card-header">
+                                <h3><i class="fas fa-download"></i> <span data-i18n="settings.backup">Backup & Restore</span></h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <button class="btn btn-primary" id="export-vault-btn">
+                                        <i class="fas fa-download"></i>
+                                        <span data-i18n="settings.export_vault">Export Vault</span>
+                                    </button>
+                                    <div class="input-help">
+                                        <i class="fas fa-info-circle"></i>
+                                        <span data-i18n="settings.export_help">Export your vault data to a JSON file</span>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <button class="btn btn-outline" id="import-vault-btn">
+                                        <i class="fas fa-upload"></i>
+                                        <span data-i18n="settings.import_vault">Import Vault</span>
+                                    </button>
+                                    <div class="input-help">
+                                        <i class="fas fa-info-circle"></i>
+                                        <span data-i18n="settings.import_help">Import vault data from a JSON file</span>
+                                    </div>
+                                </div>
+
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="auto-backup">
+                                    <span class="checkbox-custom"></span>
+                                    <span data-i18n="settings.auto_backup">Enable automatic backups</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="card settings-card">
+                            <div class="card-header">
+                                <h3><i class="fas fa-sync-alt"></i> <span data-i18n="updater.title">App Updater</span></h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="update-info">
+                                    <div class="form-group">
+                                        <label><i class="fas fa-tag"></i> <span data-i18n="updater.current_version">Current Version:</span></label>
+                                        <div class="version-display" id="current-version">1.0.0</div>
+                                    </div>
+
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="auto-check-updates" checked>
+                                        <span class="checkbox-custom"></span>
+                                        <span data-i18n="updater.auto_check">Check for updates automatically</span>
+                                    </label>
+
+                                    <div class="update-actions">
+                                        <button class="btn btn-outline" id="manual-check-updates">
+                                            <i class="fas fa-sync-alt"></i>
+                                            <span data-i18n="updater.check_updates">Check for Updates</span>
+                                        </button>
+                                    </div>
+
+                                    <div class="update-status" id="update-status"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="help-tab">
+                    <div class="page-header">
+                        <h2><i class="fas fa-question-circle"></i> <span data-i18n="help.title">Help & Documentation</span></h2>
+                        <p data-i18n="help.subtitle">Learn how to use Secure Vault effectively</p>
+                    </div>
+
+                    <div class="help-grid">
+                        <div class="card help-card">
+                            <div class="card-header">
+                                <h3><i class="fas fa-rocket"></i> <span data-i18n="help.getting_started">Getting Started</span></h3>
+                            </div>
+                            <div class="card-body">
+                                <ol>
+                                    <li data-i18n="help.step1">Create a strong master password to secure your vault</li>
+                                    <li data-i18n="help.step2">Add your first password by clicking the "Add Password" button</li>
+                                    <li data-i18n="help.step3">Use the Authenticator tab to add two-factor authentication accounts</li>
+                                    <li data-i18n="help.step4">Configure security settings to match your preferences</li>
+                                    <li data-i18n="help.step5">Regularly backup your vault using the export feature</li>
+                                </ol>
+
+                                <h4 data-i18n="help.key_features">Key Features:</h4>
+                                <ul>
+                                    <li data-i18n="help.feature1">Secure password storage with military-grade encryption</li>
+                                    <li data-i18n="help.feature2">Two-factor authentication code generation</li>
+                                    <li data-i18n="help.feature3">Password strength analysis and generation</li>
+                                    <li data-i18n="help.feature4">Automatic vault locking for security</li>
+                                    <li data-i18n="help.feature5">Secure backup and restore functionality</li>
+                                    <li data-i18n="help.feature6">Cross-platform compatibility</li>
+                                    <li data-i18n="help.feature7">Desktop QR code scanning for easy TOTP setup</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="card help-card">
+                            <div class="card-header">
+                                <h3><i class="fas fa-shield-alt"></i> <span data-i18n="help.security_guide">Security Guide</span></h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="security-tips">
+                                    <div class="tip-item">
+                                        <h5 data-i18n="help.master_password_tip">Master Password:</h5>
+                                        <p data-i18n="help.master_password_desc">Use a strong, unique master password that you don't use anywhere else. Consider using a passphrase with multiple words.</p>
+                                    </div>
+
+                                    <div class="tip-item">
+                                        <h5 data-i18n="help.backup_tip">Regular Backups:</h5>
+                                        <p data-i18n="help.backup_desc">Export your vault regularly and store backups in a secure location. This protects against data loss.</p>
+                                    </div>
+
+                                    <div class="tip-item">
+                                        <h5 data-i18n="help.auto_lock_tip">Auto-Lock:</h5>
+                                        <p data-i18n="help.auto_lock_desc">Enable auto-lock to automatically secure your vault when you're away from your computer.</p>
+                                    </div>
+
+                                    <div class="tip-item">
+                                        <h5 data-i18n="help.two_factor_tip">Two-Factor Authentication:</h5>
+                                        <p data-i18n="help.two_factor_desc">Use the built-in authenticator for accounts that support 2FA to add an extra layer of security.</p>
+                                    </div>
+
+                                    <div class="tip-item">
+                                        <h5 data-i18n="help.desktop_qr_tip">Desktop QR Scanning:</h5>
+                                        <p data-i18n="help.desktop_qr_desc">Use the desktop QR scanner to easily add TOTP accounts by scanning QR codes displayed on your screen from any application or website.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card help-card">
+                            <div class="card-header">
+                                <h3><i class="fas fa-info-circle"></i> <span data-i18n="help.about">About</span></h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="about-info">
+                                    <div class="app-info">
+                                        <img src="assets/logo.svg" alt="Secure Vault" class="about-logo">
+                                        <h4 data-i18n="app.title">Secure Vault</h4>
+                                        <p>Version 1.0.0</p>
+                                        <p data-i18n="help.description">Secure password manager and authenticator</p>
+                                    </div>
+                                    <div class="credits">
+                                        <p data-i18n="help.built_with">www.bavamont.com</p>
+                                        <p data-i18n="help.powered_by">Powered by military-grade encryption and modern security standards</p>
+                                        <p data-i18n="help.auto_updates">Automatic updates keep your security current</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <div id="toast-container" class="toast-container"></div>
+
+        <div id="password-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3><i class="fas fa-key"></i> <span id="password-modal-title" data-i18n="passwords.add_password">Add Password</span></h3>
+                </div>
+                <div class="modal-body">
+                    <form id="password-form">
+                        <div class="form-group">
+                            <label for="password-name">
+                                <i class="fas fa-tag"></i>
+                                <span data-i18n="passwords.name">Name</span>
+                            </label>
+                            <input type="text" id="password-name" required data-i18n-placeholder="passwords.name_placeholder">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="password-username">
+                                <i class="fas fa-user"></i>
+                                <span data-i18n="passwords.username">Username/Email</span>
+                            </label>
+                            <input type="text" id="password-username" data-i18n-placeholder="passwords.username_placeholder">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="password-password">
+                                <i class="fas fa-lock"></i>
+                                <span data-i18n="passwords.password">Password</span>
+                            </label>
+                            <div class="password-input-container">
+                                <input type="password" id="password-password" required data-i18n-placeholder="passwords.password_placeholder">
+                                <button type="button" class="password-toggle" id="password-password-toggle">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline" id="generate-password-btn" data-i18n-title="passwords.generate_password">
+                                    <i class="fas fa-dice"></i>
+                                </button>
+                            </div>
+                            <div class="password-strength" id="password-strength"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="password-url">
+                                <i class="fas fa-globe"></i>
+                                <span data-i18n="passwords.url">URL</span>
+                            </label>
+                            <input type="url" id="password-url" data-i18n-placeholder="passwords.url_placeholder">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="password-category">
+                                <i class="fas fa-folder"></i>
+                                <span data-i18n="passwords.category">Category</span>
+                            </label>
+                            <select id="password-category">
+                                <option value="website" data-i18n="passwords.category_website">Website</option>
+                                <option value="app" data-i18n="passwords.category_app">Application</option>
+                                <option value="email" data-i18n="passwords.category_email">Email</option>
+                                <option value="social" data-i18n="passwords.category_social">Social Media</option>
+                                <option value="financial" data-i18n="passwords.category_financial">Financial</option>
+                                <option value="other" data-i18n="passwords.category_other">Other</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="password-notes">
+                                <i class="fas fa-sticky-note"></i>
+                                <span data-i18n="passwords.notes">Notes</span>
+                            </label>
+                            <textarea id="password-notes" rows="3" data-i18n-placeholder="passwords.notes_placeholder"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline" id="password-modal-cancel">
+                        <span data-i18n="common.cancel">Cancel</span>
+                    </button>
+                    <button class="btn btn-primary" id="password-modal-save">
+                        <i class="fas fa-save"></i>
+                        <span data-i18n="common.save">Save</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="totp-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3><i class="fas fa-mobile-alt"></i> <span id="totp-modal-title" data-i18n="authenticator.add_account">Add Account</span></h3>
+                </div>
+                <div class="modal-body">
+                    <form id="totp-form">
+                        <div class="form-group">
+                            <label for="totp-name">
+                                <i class="fas fa-tag"></i>
+                                <span data-i18n="authenticator.account_name">Account Name</span>
+                            </label>
+                            <input type="text" id="totp-name" required data-i18n-placeholder="authenticator.account_name_placeholder">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="totp-issuer">
+                                <i class="fas fa-building"></i>
+                                <span data-i18n="authenticator.issuer">Issuer/Service</span>
+                            </label>
+                            <input type="text" id="totp-issuer" data-i18n-placeholder="authenticator.issuer_placeholder">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="totp-secret">
+                                <i class="fas fa-key"></i>
+                                <span data-i18n="authenticator.secret_key">Secret Key</span>
+                            </label>
+                            <input type="text" id="totp-secret" required data-i18n-placeholder="authenticator.secret_placeholder">
+                        </div>
+
+                        <div class="totp-settings">
+                            <div class="form-group">
+                                <label for="totp-digits">
+                                    <i class="fas fa-hashtag"></i>
+                                    <span data-i18n="authenticator.digits">Digits</span>
+                                </label>
+                                <select id="totp-digits">
+                                    <option value="6" selected>6</option>
+                                    <option value="8">8</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="totp-period">
+                                    <i class="fas fa-clock"></i>
+                                    <span data-i18n="authenticator.period">Period (seconds)</span>
+                                </label>
+                                <select id="totp-period">
+                                    <option value="30" selected>30</option>
+                                    <option value="60">60</option>
+                                </select>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline" id="totp-modal-cancel">
+                        <span data-i18n="common.cancel">Cancel</span>
+                    </button>
+                    <button class="btn btn-primary" id="totp-modal-save">
+                        <i class="fas fa-save"></i>
+                        <span data-i18n="common.save">Save</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="change-password-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3><i class="fas fa-key"></i> <span data-i18n="settings.change_master_password">Change Master Password</span></h3>
+                </div>
+                <div class="modal-body">
+                    <form id="change-password-form">
+                        <div class="form-group">
+                            <label for="current-master-password">
+                                <i class="fas fa-lock"></i>
+                                <span data-i18n="settings.current_password">Current Password</span>
+                            </label>
+                            <div class="password-input-container">
+                                <input type="password" id="current-master-password" required data-i18n-placeholder="settings.enter_current_password">
+                                <button type="button" class="password-toggle" id="current-master-password-toggle">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="new-master-password">
+                                <i class="fas fa-key"></i>
+                                <span data-i18n="settings.new_password">New Password</span>
+                            </label>
+                            <div class="password-input-container">
+                                <input type="password" id="new-master-password" required data-i18n-placeholder="settings.enter_new_password">
+                                <button type="button" class="password-toggle" id="new-master-password-toggle">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                            <div class="password-strength" id="new-password-strength"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="confirm-new-master-password">
+                                <i class="fas fa-key"></i>
+                                <span data-i18n="settings.confirm_new_password">Confirm New Password</span>
+                            </label>
+                            <div class="password-input-container">
+                                <input type="password" id="confirm-new-master-password" required data-i18n-placeholder="settings.confirm_new_password">
+                                <button type="button" class="password-toggle" id="confirm-new-master-password-toggle">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline" id="change-password-modal-cancel">
+                        <span data-i18n="common.cancel">Cancel</span>
+                    </button>
+                    <button class="btn btn-primary" id="change-password-modal-save">
+                        <i class="fas fa-save"></i>
+                        <span data-i18n="settings.change_password">Change Password</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="delete-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3><i class="fas fa-exclamation-triangle"></i> <span data-i18n="delete.title">Confirm Delete</span></h3>
+                </div>
+                <div class="modal-body">
+                    <div class="delete-warning">
+                        <div class="warning-icon">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <div class="delete-message">
+                            <p id="delete-message" data-i18n="delete.password_message">Are you sure you want to delete this password? This action cannot be undone.</p>
+                            <div class="delete-item-info">
+                                <div class="delete-item-label" id="delete-item-label" data-i18n="delete.password_name">Password Name:</div>
+                                <div class="delete-item-name" id="delete-item-name"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline" id="delete-modal-cancel">
+                        <span data-i18n="common.cancel">Cancel</span>
+                    </button>
+                    <button class="btn btn-primary" id="delete-modal-confirm">
+                        <i class="fas fa-trash"></i>
+                        <span data-i18n="common.delete">Delete</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="update-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3><i class="fas fa-download"></i> <span data-i18n="updater.available">Update Available</span></h3>
+                </div>
+                <div class="modal-body">
+                    <div class="update-details">
+                        <div class="version-info">
+                            <div class="version-item">
+                                <span data-i18n="updater.current_version">Current Version:</span>
+                                <span id="modal-current-version">1.0.0</span>
+                            </div>
+                            <div class="version-item">
+                                <span data-i18n="updater.new_version">New Version:</span>
+                                <span id="modal-new-version">1.0.1</span>
+                            </div>
+                        </div>
+
+                        <div class="release-notes" id="release-notes">
+                            <h4 data-i18n="updater.release_notes">Release Notes</h4>
+                            <div id="release-notes-content"></div>
+                        </div>
+
+                        <div class="download-progress" id="download-progress" style="display: none;">
+                            <div class="progress-info">
+                                <span data-i18n="updater.download_progress">Download Progress:</span>
+                                <span id="download-percentage">0%</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="download-progress-fill"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline" id="skip-update">
+                        <span data-i18n="updater.skip_version">Skip This Version</span>
+                    </button>
+                    <button class="btn btn-outline" id="install-later">
+                        <span data-i18n="updater.install_later">Install Later</span>
+                    </button>
+                    <button class="btn btn-primary" id="install-update">
+                        <i class="fas fa-download"></i>
+                        <span data-i18n="updater.install_now">Install Now</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="i18n.js"></script>
+    <script src="renderer.js"></script>
+</body>
+</html>
