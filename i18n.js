@@ -1,3 +1,22 @@
+/**
+ * @fileoverview Internationalization system for Secure Vault
+ * Provides multi-language support for the application interface
+ */
+
+/**
+ * @typedef {Object} I18nInstance
+ * @property {string} currentLanguage - Current active language code
+ * @property {Object} translations - Translation dictionaries by language
+ * @property {Function} init - Initialize i18n system
+ * @property {Function} t - Translate function
+ * @property {Function} setLanguage - Set active language
+ * @property {Function} translatePage - Translate all elements on page
+ */
+
+/**
+ * Internationalization system instance
+ * @type {I18nInstance}
+ */
 const i18n = {
     currentLanguage: 'en',
     translations: {
@@ -132,34 +151,54 @@ const i18n = {
             'help.subtitle': 'Learn how to use Secure Vault effectively',
             'help.getting_started': 'Getting Started',
             'help.step1': 'Create a strong master password to secure your vault',
-            'help.step2': 'Add your first password by clicking the "Add Password" button',
+            'help.step2': 'Add your first password by clicking the Add Password button',
             'help.step3': 'Use the Authenticator tab to add two-factor authentication accounts',
             'help.step4': 'Configure security settings to match your preferences',
             'help.step5': 'Regularly backup your vault using the export feature',
+            'help.step6': 'Use Advanced Search to find passwords with specific criteria',
+            'help.step7': 'Run Security Audit to identify weak or compromised passwords',
+            'help.step8': 'Configure global shortcuts and system integration features',
             'help.key_features': 'Key Features:',
-            'help.feature1': 'Secure password storage with military-grade encryption',
-            'help.feature2': 'Two-factor authentication code generation',
-            'help.feature3': 'Password strength analysis and generation',
-            'help.feature4': 'Automatic vault locking for security',
-            'help.feature5': 'Secure backup and restore functionality',
-            'help.feature6': 'Cross-platform compatibility',
-            'help.feature7': 'Desktop QR code scanning for easy TOTP setup',
-            'help.security_guide': 'Security Guide',
+            'help.feature1': 'AES-256 encrypted password storage with PBKDF2 key derivation',
+            'help.feature2': 'RFC 6238 compliant TOTP code generation',
+            'help.feature3': 'Password strength analysis using zxcvbn library',
+            'help.feature4': 'Configurable auto-lock with activity monitoring',
+            'help.feature5': 'Multiple import/export formats with auto-detection',
+            'help.feature6': 'Cross-platform Electron-based application',
+            'help.feature7': 'Desktop screen capture QR code scanning',
+            'help.feature8': 'System tray integration and global shortcuts',
+            'help.feature9': 'Advanced search with filtering by multiple criteria',
+            'help.feature10': 'Security audit for weak, reused, and old passwords',
+            'help.feature11': 'Custom categories with colors, icons, and tags',
+            'help.feature12': 'Comprehensive import from LastPass, Bitwarden, KeePass, Chrome, Firefox, WinAuth',
+            'help.feature13': 'Encrypted .svault backup format with compression',
+            'help.feature14': 'Auto-update system with progress tracking',
+            'help.feature15': 'Full internationalization with English and German',
+            'help.feature16': 'Offline operation with no cloud dependencies',
+            'help.security_guide': 'Security Information',
             'help.master_password_tip': 'Master Password:',
-            'help.master_password_desc': 'Use a strong, unique master password that you don\'t use anywhere else. Consider using a passphrase with multiple words.',
+            'help.master_password_desc': 'Choose a strong, unique master password. Loss of master password results in complete data loss as it cannot be recovered.',
             'help.backup_tip': 'Regular Backups:',
-            'help.backup_desc': 'Export your vault regularly and store backups in a secure location. This protects against data loss.',
+            'help.backup_desc': 'Export your vault regularly using the encrypted .svault format. Store backups securely and verify restore process periodically.',
             'help.auto_lock_tip': 'Auto-Lock:',
-            'help.auto_lock_desc': 'Enable auto-lock to automatically secure your vault when you\'re away from your computer.',
+            'help.auto_lock_desc': 'Configurable auto-lock (5-60 minutes) monitors mouse, keyboard, and touch activity to automatically secure the vault.',
             'help.two_factor_tip': 'Two-Factor Authentication:',
-            'help.two_factor_desc': 'Use the built-in authenticator for accounts that support 2FA to add an extra layer of security.',
+            'help.two_factor_desc': 'Built-in TOTP authenticator supports 6/8 digit codes with 30/60 second periods. Compatible with Google Authenticator format.',
             'help.desktop_qr_tip': 'Desktop QR Scanning:',
-            'help.desktop_qr_desc': 'Use the desktop QR scanner to easily add TOTP accounts by scanning QR codes displayed on your screen from any application or website.',
-            'help.about': 'About',
-            'help.description': 'Secure password manager and authenticator',
+            'help.desktop_qr_desc': 'Screen capture functionality detects and decodes QR codes from any application or website displayed on your desktop.',
+            'help.import_tip': 'Import System:',
+            'help.import_desc': 'Supports automatic format detection for LastPass, Bitwarden, KeePass, Chrome, Firefox, and WinAuth exports with data validation.',
+            'help.winauth_tip': 'WinAuth Import:',
+            'help.winauth_desc': 'Import TOTP accounts from WinAuth TXT files containing otpauth URIs with support for custom digits, periods, and Battle.net serial numbers.',
+            'help.search_tip': 'Advanced Search:',
+            'help.search_desc': 'Filter passwords by name, username, URL, category, tags, strength, and age using the Advanced Search modal.',
+            'help.audit_tip': 'Security Audit:',
+            'help.audit_desc': 'Analyzes passwords for security issues including weak passwords, reused passwords, and passwords older than specified thresholds.',
+            'help.about': 'Technical Information',
+            'help.description': 'Desktop password manager and authenticator built with Electron',
             'help.built_with': 'www.bavamont.com',
-            'help.powered_by': 'Powered by military-grade encryption and modern security standards',
-            'help.auto_updates': 'Automatic updates keep your security current',
+            'help.powered_by': 'AES-256 encryption, PBKDF2 key derivation, and zero-knowledge architecture',
+            'help.auto_updates': 'Automatic updates provide security patches and feature improvements',
 
             'updater.title': 'App Updater',
             'updater.checking': 'Checking for updates...',
@@ -177,12 +216,16 @@ const i18n = {
             'updater.release_notes': 'Release Notes',
             'updater.download_progress': 'Download Progress:',
             'updater.auto_check': 'Check for updates automatically',
+            'updater.ready_to_install': 'Update Ready to Install',
+            'updater.restart_to_apply': 'Restart the application to apply the update',
 
             'delete.title': 'Confirm Delete',
             'delete.password_message': 'Are you sure you want to delete this password? This action cannot be undone.',
             'delete.account_message': 'Are you sure you want to delete this account? This action cannot be undone.',
+            'delete.category_message': 'Are you sure you want to delete this category? Entries will be moved to General.',
             'delete.password_name': 'Password Name:',
             'delete.account_name': 'Account Name:',
+            'delete.category_name': 'Category Name:',
 
             'common.save': 'Save',
             'common.cancel': 'Cancel',
@@ -195,6 +238,7 @@ const i18n = {
             'common.apply': 'Apply',
             'common.reset': 'Reset',
             'common.default': 'Default',
+            'common.later': 'Later',
             'common.fill_all_fields': 'Please fill in all fields',
             'common.name_password_required': 'Name and password are required',
             'common.enter_master_password': 'Please enter your master password',
@@ -204,6 +248,12 @@ const i18n = {
             'common.unknown_error': 'Unknown error',
             'common.confirm_delete_password': 'Are you sure you want to delete this password?',
             'common.confirm_delete_account': 'Are you sure you want to delete this account?',
+            'common.export': 'Export',
+            'common.import': 'Import',
+            'common.required_encrypted': 'Required for encrypted formats',
+            'common.no_file_selected': 'No file selected',
+            'common.press_keys': 'Press keys...',
+            'common.set': 'Set',
 
             'toast.vault_created': 'Vault created successfully',
             'toast.vault_unlocked': 'Vault unlocked',
@@ -244,7 +294,221 @@ const i18n = {
             'toast.delete_account_failed': 'Failed to delete account',
             'toast.install_update_failed': 'Failed to install update',
             'toast.desktop_scan_sources_unavailable': 'No desktop sources available',
-            'toast.invalid_qr_format': 'Invalid QR code format'
+            'toast.invalid_qr_format': 'Invalid QR code format',
+            'toast.auto_locked': 'Vault automatically locked due to inactivity',
+            'toast.category_deleted': 'Category deleted successfully',
+            'toast.category_saved': 'Category saved successfully',
+            'toast.category_name_required': 'Category name is required',
+            'toast.category_delete_failed': 'Failed to delete category',
+            'toast.category_save_failed': 'Failed to save category',
+            'toast.category_load_failed': 'Failed to load categories',
+            'toast.export_failed': 'Export failed',
+            'toast.import_failed': 'Import failed',
+            'toast.import_no_file': 'Please select a file to import',
+            'toast.audit_failed': 'Audit failed',
+            'toast.search_failed': 'Search failed',
+            'toast.settings_saved': 'Settings saved successfully',
+            'toast.settings_save_failed': 'Failed to save settings',
+            'toast.settings_load_failed': 'Failed to load settings',
+            'toast.startup_setting_failed': 'Failed to update startup setting',
+            'toast.backup_exported': 'Secure backup exported successfully',
+            'toast.exported_entries': 'Exported {count} entries in {format} format',
+            'toast.imported_entries': 'Imported {count} entries ({format} format)',
+
+            'audit.no_issues': 'No security issues found!',
+            'audit.password_too_short': 'Password too short',
+            'audit.weak_password': 'Weak password',
+            'audit.reused_password': 'Reused password',
+            'audit.old_password': 'Old password',
+            'search.no_results': 'No passwords match your search criteria.',
+            'search.found_results': 'Found {count} password{plural}',
+            'categories.all_categories': 'All Categories',
+
+            'shortcuts.quick_access': 'Ctrl+Shift+V',
+            'shortcuts.auto_lock': 'Ctrl+Shift+L',
+            'keys.ctrl': 'Ctrl',
+            'keys.alt': 'Alt',
+            'keys.shift': 'Shift',
+            'keys.meta': 'Meta',
+
+            'settings.desktop': 'Desktop Integration',
+            'settings.startup': 'Launch on system startup',
+            'settings.quick_access_shortcut': 'Quick Access Shortcut',
+            'settings.auto_lock_shortcut': 'Auto-Lock Shortcut',
+            'settings.set': 'Set',
+            'settings.notifications': 'Enable notifications',
+            'settings.minimize_tray': 'Minimize to system tray',
+            'settings.advanced': 'Advanced Features',
+            'settings.advanced_search': 'Advanced Search',
+            'settings.advanced_search_help': 'Search passwords with advanced filters',
+            'settings.security_audit': 'Security Audit',
+            'settings.security_audit_help': 'Analyze password security and find weak passwords',
+            'settings.manage_categories': 'Manage Categories',
+            'settings.manage_categories_help': 'Create and organize password categories',
+            'settings.action_advanced_search': 'Advanced Search',
+            'settings.action_security_audit': 'Security Audit',
+            'settings.action_categories': 'Categories',
+
+            'search.title': 'Advanced Search',
+            'search.name': 'Name',
+            'search.username': 'Username',
+            'search.url': 'URL',
+            'search.category': 'Category',
+            'search.tags': 'Tags (comma-separated)',
+            'search.weak_only': 'Show weak passwords only',
+            'search.old_only': 'Show old passwords only',
+            'search.search': 'Search',
+            'search.clear': 'Clear',
+            'search.close': 'Close',
+            'search.all_categories': 'All Categories',
+            'search.no_results': 'No passwords match your search criteria.',
+            'search.found_results': 'Found {count} password(s)',
+
+            'audit.title': 'Security Audit',
+            'audit.total_passwords': 'Total Passwords',
+            'audit.weak_passwords': 'Weak Passwords',
+            'audit.reused_passwords': 'Reused Passwords',
+            'audit.old_passwords': 'Old Passwords',
+            'audit.no_issues': 'No security issues found!',
+            'audit.close': 'Close',
+
+            'categories.title': 'Manage Categories',
+            'categories.add_category': 'Add New Category',
+            'categories.category_name': 'Category Name',
+            'categories.category_color': 'Color',
+            'categories.category_icon': 'Icon',
+            'categories.save_category': 'Save Category',
+            'categories.close': 'Close',
+            'categories.cancel': 'Cancel',
+
+            'import_export.title': 'Import/Export',
+            'import_export.export': 'Export',
+            'import_export.import': 'Import',
+            'import_export.export_format': 'Export Format',
+            'import_export.import_format': 'Import Format',
+            'import_export.encryption_password': 'Encryption Password',
+            'import_export.decryption_password': 'Decryption Password',
+            'import_export.password_required': 'Required for encrypted formats',
+            'import_export.choose_file': 'Choose File',
+            'import_export.no_file_selected': 'No file selected',
+            'import_export.auto_detect': 'Auto-detect format',
+            'import_export.close': 'Close',
+            'import_export.title': 'Export/Import Vault',
+            'import_export.export_data': 'Export Data',
+            'import_export.import_data': 'Import Data',
+            'import_export.export_format_label': 'Export Format',
+            'import_export.import_format_label': 'Import Format',
+            'import_export.encryption_password_label': 'Encryption Password',
+            'import_export.decryption_password_label': 'Decryption Password',
+            'import_export.export_password_placeholder': 'Password for encrypted export',
+            'import_export.import_password_placeholder': 'Password for encrypted import',
+            'import_export.choose_file_btn': 'Choose File',
+
+            'formats.json': 'Secure Vault JSON (Recommended)',
+            'formats.csv': 'Generic CSV',
+            'formats.securevault': 'Encrypted Secure Vault',
+            'formats.auto': 'Auto-detect format',
+            'formats.json_simple': 'JSON',
+            'formats.csv_simple': 'CSV',
+            'formats.lastpass': 'LastPass CSV',
+            'formats.bitwarden': 'Bitwarden JSON',
+            'formats.keepass': 'KeePass CSV',
+            'formats.chrome': 'Chrome CSV',
+            'formats.firefox': 'Firefox JSON',
+            'formats.winauth': 'WinAuth TXT',
+            'formats.generic_csv': 'Generic CSV',
+            'formats.generic_json': 'Generic JSON',
+            'formats.chrome_passwords': 'Chrome Passwords CSV',
+            'formats.securevault_encrypted': 'Secure Vault (Encrypted)',
+
+            'import.default_entry_name': 'Imported Entry',
+            'import.default_category': 'Imported',
+
+            'categories.general': 'General',
+            'categories.work': 'Work',
+            'categories.personal': 'Personal',
+            'categories.social': 'Social',
+
+            'errors.vault_locked': 'Vault is locked',
+            'errors.update_in_progress': 'Update check already in progress',
+            'errors.updates_not_supported_linux': 'Updates not supported on Linux',
+            'errors.updates_packaged_only': 'Updates only available in packaged app',
+            'errors.source_not_found': 'Source not found',
+            'errors.no_update_downloaded': 'No update available to install. Check for updates first.',
+            'errors.master_password_not_set': 'Master password not set',
+            'errors.invalid_password': 'Invalid password',
+            'errors.current_password_incorrect': 'Current password is incorrect',
+            'errors.vault_not_initialized': 'Vault not initialized',
+            'errors.export_canceled': 'Export canceled',
+            'errors.unknown_error': 'An unknown error occurred',
+
+            'tray.show_secure_vault': 'Show Secure Vault',
+            'tray.lock_vault': 'Lock Vault',
+            'tray.quit': 'Quit',
+            'tray.tooltip': 'Secure Vault',
+
+            'dialogs.export_backup_title': 'Export Secure Backup',
+            'dialogs.import_vault_title': 'Import Vault Data',
+            'dialogs.backup_password_title': 'Backup Password',
+            'dialogs.error_title': 'Error',
+            'dialogs.unexpected_error_title': 'Unexpected Error',
+
+            'file_types.csv_files': 'CSV Files',
+            'file_types.json_files': 'JSON Files',
+            'file_types.secure_vault_files': 'Secure Vault Files',
+            'file_types.secure_vault_backup': 'Secure Vault Backup',
+            'file_types.all_files': 'All Files',
+
+            'about.application_name': 'Secure Vault',
+            'about.credits': 'Built with Electron and modern encryption',
+
+            'import.default_issuer': 'Imported',
+            'formats.unknown_format': 'Unknown Format',
+
+            'errors.password_required_encrypted': 'Password required for encrypted export',
+            'errors.password_required_backup': 'Password required for encrypted backup',
+            'errors.invalid_backup_format': 'Invalid backup format',
+            'errors.invalid_totp_format': 'Invalid TOTP URL format',
+            'errors.unable_initialize_vault': 'Unable to initialize vault store. Please check file permissions.',
+            'errors.vault_corruption_persists': 'Vault store corruption persists. Please contact support or manually delete vault files.',
+
+            'csv_headers.name': 'Name',
+            'csv_headers.url': 'URL',
+            'csv_headers.username': 'Username',
+            'csv_headers.password': 'Password',
+            'csv_headers.category': 'Category',
+            'csv_headers.notes': 'Notes',
+            'csv_headers.tags': 'Tags',
+
+            'import_categories.chrome_import': 'Chrome Import',
+            'import_categories.firefox_import': 'Firefox Import',
+
+            'languages.english': 'English',
+            'languages.german': 'Deutsch',
+
+            'time.5_minutes': '5 minutes',
+            'time.10_minutes': '10 minutes',
+            'time.15_minutes': '15 minutes',
+            'time.30_minutes': '30 minutes',
+            'time.1_hour': '1 hour',
+            'time.10_seconds': '10 seconds',
+            'time.30_seconds': '30 seconds',
+            'time.1_minute': '1 minute',
+            'time.2_minutes': '2 minutes',
+
+            'numbers.6': '6',
+            'numbers.8': '8',
+            'numbers.30': '30',
+            'numbers.60': '60',
+
+            'category_icons.folder': '📁 Folder',
+            'category_icons.work': '💼 Work',
+            'category_icons.personal': '👤 Personal',
+            'category_icons.social': '👥 Social',
+            'category_icons.shopping': '🛒 Shopping',
+            'category_icons.finance': '💳 Finance',
+            'category_icons.security': '🛡️ Security',
+            'category_icons.gaming': '🎮 Gaming'
         },
         de: {
             'app.title': 'Secure Vault',
@@ -377,34 +641,54 @@ const i18n = {
             'help.subtitle': 'Lernen Sie, wie Sie Secure Vault effektiv nutzen',
             'help.getting_started': 'Erste Schritte',
             'help.step1': 'Erstellen Sie ein starkes Master-Passwort, um Ihren Tresor zu sichern',
-            'help.step2': 'Fügen Sie Ihr erstes Passwort hinzu, indem Sie auf "Passwort hinzufügen" klicken',
+            'help.step2': 'Fügen Sie Ihr erstes Passwort hinzu, indem Sie auf Passwort hinzufügen klicken',
             'help.step3': 'Verwenden Sie den Authentifikator-Tab, um Zwei-Faktor-Authentifizierungskonten hinzuzufügen',
             'help.step4': 'Konfigurieren Sie Sicherheitseinstellungen nach Ihren Präferenzen',
             'help.step5': 'Sichern Sie Ihren Tresor regelmäßig mit der Export-Funktion',
+            'help.step6': 'Verwenden Sie die Erweiterte Suche, um Passwörter nach bestimmten Kriterien zu finden',
+            'help.step7': 'Führen Sie ein Sicherheitsaudit durch, um schwache oder kompromittierte Passwörter zu identifizieren',
+            'help.step8': 'Konfigurieren Sie globale Tastenkürzel und System-Integrationsfunktionen',
             'help.key_features': 'Hauptfunktionen:',
-            'help.feature1': 'Sichere Passwort-Speicherung mit militärischer Verschlüsselung',
-            'help.feature2': 'Zwei-Faktor-Authentifizierungscode-Generierung',
-            'help.feature3': 'Passwort-Stärke-Analyse und -Generierung',
-            'help.feature4': 'Automatische Tresor-Sperrung für Sicherheit',
-            'help.feature5': 'Sichere Sicherungs- und Wiederherstellungsfunktion',
-            'help.feature6': 'Plattformübergreifende Kompatibilität',
-            'help.feature7': 'Desktop-QR-Code-Scanning für einfache TOTP-Einrichtung',
-            'help.security_guide': 'Sicherheitsleitfaden',
+            'help.feature1': 'AES-256 verschlüsselte Passwort-Speicherung mit PBKDF2 Schlüsselableitung',
+            'help.feature2': 'RFC 6238 konforme TOTP-Code-Generierung',
+            'help.feature3': 'Passwort-Stärke-Analyse mit zxcvbn-Bibliothek',
+            'help.feature4': 'Konfigurierbare Auto-Sperre mit Aktivitätsüberwachung',
+            'help.feature5': 'Mehrere Import/Export-Formate mit automatischer Erkennung',
+            'help.feature6': 'Plattformübergreifende Electron-basierte Anwendung',
+            'help.feature7': 'Desktop-Bildschirmaufnahme QR-Code-Scanning',
+            'help.feature8': 'Systemtray-Integration und globale Tastenkürzel',
+            'help.feature9': 'Erweiterte Suche mit Filterung nach mehreren Kriterien',
+            'help.feature10': 'Sicherheitsaudit für schwache, wiederverwendete und alte Passwörter',
+            'help.feature11': 'Benutzerdefinierte Kategorien mit Farben, Symbolen und Tags',
+            'help.feature12': 'Umfassender Import von LastPass, Bitwarden, KeePass, Chrome, Firefox, WinAuth',
+            'help.feature13': 'Verschlüsseltes .svault Backup-Format mit Kompression',
+            'help.feature14': 'Auto-Update-System mit Fortschrittsanzeige',
+            'help.feature15': 'Vollständige Internationalisierung mit Englisch und Deutsch',
+            'help.feature16': 'Offline-Betrieb ohne Cloud-Abhängigkeiten',
+            'help.security_guide': 'Sicherheitsinformationen',
             'help.master_password_tip': 'Master-Passwort:',
-            'help.master_password_desc': 'Verwenden Sie ein starkes, einzigartiges Master-Passwort, das Sie nirgendwo anders verwenden. Erwägen Sie eine Passphrase mit mehreren Wörtern.',
+            'help.master_password_desc': 'Wählen Sie ein starkes, einzigartiges Master-Passwort. Der Verlust des Master-Passworts führt zu vollständigem Datenverlust, da es nicht wiederhergestellt werden kann.',
             'help.backup_tip': 'Regelmäßige Sicherungen:',
-            'help.backup_desc': 'Exportieren Sie Ihren Tresor regelmäßig und speichern Sie Sicherungen an einem sicheren Ort. Dies schützt vor Datenverlust.',
+            'help.backup_desc': 'Exportieren Sie Ihren Tresor regelmäßig im verschlüsselten .svault-Format. Speichern Sie Sicherungen sicher und überprüfen Sie den Wiederherstellungsprozess regelmäßig.',
             'help.auto_lock_tip': 'Auto-Sperre:',
-            'help.auto_lock_desc': 'Aktivieren Sie die Auto-Sperre, um Ihren Tresor automatisch zu sichern, wenn Sie vom Computer weg sind.',
+            'help.auto_lock_desc': 'Konfigurierbare Auto-Sperre (5-60 Minuten) überwacht Maus-, Tastatur- und Touch-Aktivitäten, um den Tresor automatisch zu sichern.',
             'help.two_factor_tip': 'Zwei-Faktor-Authentifizierung:',
-            'help.two_factor_desc': 'Verwenden Sie den integrierten Authentifikator für Konten, die 2FA unterstützen, um eine zusätzliche Sicherheitsebene hinzuzufügen.',
+            'help.two_factor_desc': 'Integrierter TOTP-Authentifikator unterstützt 6/8-stellige Codes mit 30/60-Sekunden-Perioden. Kompatibel mit Google Authenticator-Format.',
             'help.desktop_qr_tip': 'Desktop-QR-Scanning:',
-            'help.desktop_qr_desc': 'Verwenden Sie den Desktop-QR-Scanner, um TOTP-Konten einfach hinzuzufügen, indem Sie QR-Codes scannen, die auf Ihrem Bildschirm von jeder Anwendung oder Website angezeigt werden.',
-            'help.about': 'Über',
-            'help.description': 'Sicherer Passwort-Manager und Authentifikator',
+            'help.desktop_qr_desc': 'Bildschirmaufnahme-Funktionalität erkennt und decodiert QR-Codes von jeder Anwendung oder Website auf Ihrem Desktop.',
+            'help.import_tip': 'Import-System:',
+            'help.import_desc': 'Unterstützt automatische Formaterkennung für LastPass-, Bitwarden-, KeePass-, Chrome-, Firefox- und WinAuth-Exporte mit Datenvalidierung.',
+            'help.winauth_tip': 'WinAuth-Import:',
+            'help.winauth_desc': 'Importieren Sie TOTP-Konten aus WinAuth-TXT-Dateien mit otpauth-URIs mit Unterstützung für benutzerdefinierte Ziffern, Perioden und Battle.net-Seriennummern.',
+            'help.search_tip': 'Erweiterte Suche:',
+            'help.search_desc': 'Filtern Sie Passwörter nach Name, Benutzername, URL, Kategorie, Tags, Stärke und Alter über das Erweiterte Suche-Modal.',
+            'help.audit_tip': 'Sicherheitsaudit:',
+            'help.audit_desc': 'Analysiert Passwörter auf Sicherheitsprobleme einschließlich schwacher Passwörter, wiederverwendeter Passwörter und Passwörter älter als festgelegte Schwellenwerte.',
+            'help.about': 'Technische Informationen',
+            'help.description': 'Desktop-Passwort-Manager und Authentifikator mit Electron erstellt',
             'help.built_with': 'www.bavamont.com',
-            'help.powered_by': 'Angetrieben von militärischer Verschlüsselung und modernen Sicherheitsstandards',
-            'help.auto_updates': 'Automatische Updates halten Ihre Sicherheit aktuell',
+            'help.powered_by': 'AES-256-Verschlüsselung, PBKDF2-Schlüsselableitung und Zero-Knowledge-Architektur',
+            'help.auto_updates': 'Automatische Updates bieten Sicherheits-Patches und Funktionsverbesserungen',
 
             'updater.title': 'App-Updater',
             'updater.checking': 'Suche nach Updates...',
@@ -422,6 +706,8 @@ const i18n = {
             'updater.release_notes': 'Versionshinweise',
             'updater.download_progress': 'Download-Fortschritt:',
             'updater.auto_check': 'Automatisch nach Updates suchen',
+            'updater.ready_to_install': 'Update bereit zur Installation',
+            'updater.restart_to_apply': 'Starten Sie die Anwendung neu, um das Update anzuwenden',
 
             'delete.title': 'Löschen bestätigen',
             'delete.password_message': 'Sind Sie sicher, dass Sie dieses Passwort löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.',
@@ -440,6 +726,7 @@ const i18n = {
             'common.apply': 'Anwenden',
             'common.reset': 'Zurücksetzen',
             'common.default': 'Standard',
+            'common.later': 'Später',
             'common.fill_all_fields': 'Bitte füllen Sie alle Felder aus',
             'common.name_password_required': 'Name und Passwort sind erforderlich',
             'common.enter_master_password': 'Bitte geben Sie Ihr Master-Passwort ein',
@@ -489,16 +776,244 @@ const i18n = {
             'toast.delete_account_failed': 'Konto löschen fehlgeschlagen',
             'toast.install_update_failed': 'Update installieren fehlgeschlagen',
             'toast.desktop_scan_sources_unavailable': 'Keine Desktop-Quellen verfügbar',
-            'toast.invalid_qr_format': 'Ungültiges QR-Code-Format'
+            'toast.invalid_qr_format': 'Ungültiges QR-Code-Format',
+            'toast.auto_locked': 'Tresor automatisch gesperrt aufgrund von Inaktivität',
+            'toast.category_deleted': 'Kategorie erfolgreich gelöscht',
+            'toast.category_saved': 'Kategorie erfolgreich gespeichert',
+            'toast.category_name_required': 'Kategoriename ist erforderlich',
+            'toast.category_delete_failed': 'Kategorie löschen fehlgeschlagen',
+            'toast.category_save_failed': 'Kategorie speichern fehlgeschlagen',
+            'toast.category_load_failed': 'Kategorien laden fehlgeschlagen',
+            'toast.export_failed': 'Export fehlgeschlagen',
+            'toast.import_failed': 'Import fehlgeschlagen',
+            'toast.import_no_file': 'Bitte wählen Sie eine Datei zum Importieren',
+            'toast.audit_failed': 'Audit fehlgeschlagen',
+            'toast.search_failed': 'Suche fehlgeschlagen',
+            'toast.settings_saved': 'Einstellungen erfolgreich gespeichert',
+            'toast.settings_save_failed': 'Einstellungen speichern fehlgeschlagen',
+            'toast.settings_load_failed': 'Einstellungen laden fehlgeschlagen',
+            'toast.startup_setting_failed': 'Startup-Einstellung aktualisieren fehlgeschlagen',
+            'toast.backup_exported': 'Sichere Sicherung erfolgreich exportiert',
+            'toast.exported_entries': '{count} Einträge im {format}-Format exportiert',
+            'toast.imported_entries': '{count} Einträge ({format}-Format) importiert',
+
+            'delete.category_message': 'Sind Sie sicher, dass Sie diese Kategorie löschen möchten? Einträge werden zu Allgemein verschoben.',
+            'delete.category_name': 'Kategoriename:',
+
+            'common.export': 'Export',
+            'common.import': 'Import',
+            'common.required_encrypted': 'Erforderlich für verschlüsselte Formate',
+            'common.no_file_selected': 'Keine Datei ausgewählt',
+            'common.press_keys': 'Tasten drücken...',
+            'common.set': 'Setzen',
+
+            'settings.action_advanced_search': 'Erweiterte Suche',
+            'settings.action_security_audit': 'Sicherheitsaudit',
+            'settings.action_categories': 'Kategorien',
+            'settings.advanced_search': 'Erweiterte Suche',
+            'settings.advanced_search_help': 'Passwörter mit erweiterten Filtern durchsuchen',
+            'settings.security_audit': 'Sicherheitsaudit',
+            'settings.security_audit_help': 'Passwortsicherheit analysieren und schwache Passwörter finden',
+            'settings.manage_categories': 'Kategorien verwalten',
+            'settings.manage_categories_help': 'Passwort-Kategorien erstellen und organisieren',
+
+            'import_export.title': 'Export/Import Tresor',
+            'import_export.export_format_label': 'Export-Format',
+            'import_export.import_format_label': 'Import-Format',
+            'import_export.encryption_password_label': 'Verschlüsselungspasswort',
+            'import_export.decryption_password_label': 'Entschlüsselungspasswort',
+            'import_export.export_password_placeholder': 'Passwort für verschlüsselten Export',
+            'import_export.import_password_placeholder': 'Passwort für verschlüsselten Import',
+            'import_export.choose_file_btn': 'Datei wählen',
+
+            'formats.json': 'Secure Vault JSON (Empfohlen)',
+            'formats.csv': 'Generisches CSV',
+            'formats.securevault': 'Verschlüsselter Secure Vault',
+            'formats.auto': 'Format automatisch erkennen',
+            'formats.json_simple': 'JSON',
+            'formats.csv_simple': 'CSV',
+            'formats.lastpass': 'LastPass CSV',
+            'formats.bitwarden': 'Bitwarden JSON',
+            'formats.keepass': 'KeePass CSV',
+            'formats.chrome': 'Chrome CSV',
+            'formats.firefox': 'Firefox JSON',
+            'formats.winauth': 'WinAuth TXT',
+            'formats.generic_csv': 'Generisches CSV',
+            'formats.generic_json': 'Generisches JSON',
+            'formats.chrome_passwords': 'Chrome Passwörter CSV',
+            'formats.securevault_encrypted': 'Secure Vault (Verschlüsselt)',
+
+            'import.default_entry_name': 'Importierter Eintrag',
+            'import.default_category': 'Importiert',
+
+            'categories.general': 'Allgemein',
+            'categories.work': 'Arbeit',
+            'categories.personal': 'Persönlich',
+            'categories.social': 'Sozial',
+
+            'errors.vault_locked': 'Tresor ist gesperrt',
+            'errors.update_in_progress': 'Update-Prüfung bereits im Gange',
+            'errors.updates_not_supported_linux': 'Updates unter Linux nicht unterstützt',
+            'errors.updates_packaged_only': 'Updates nur in verpackter App verfügbar',
+            'errors.source_not_found': 'Quelle nicht gefunden',
+            'errors.no_update_downloaded': 'Kein Update zum Installieren verfügbar. Prüfen Sie zuerst nach Updates.',
+            'errors.master_password_not_set': 'Master-Passwort nicht gesetzt',
+            'errors.invalid_password': 'Ungültiges Passwort',
+            'errors.current_password_incorrect': 'Aktuelles Passwort ist falsch',
+            'errors.vault_not_initialized': 'Tresor nicht initialisiert',
+            'errors.export_canceled': 'Export abgebrochen',
+            'errors.unknown_error': 'Ein unbekannter Fehler ist aufgetreten',
+
+            'tray.show_secure_vault': 'Secure Vault anzeigen',
+            'tray.lock_vault': 'Tresor sperren',
+            'tray.quit': 'Beenden',
+            'tray.tooltip': 'Secure Vault',
+
+            'dialogs.export_backup_title': 'Sichere Sicherung exportieren',
+            'dialogs.import_vault_title': 'Tresor-Daten importieren',
+            'dialogs.backup_password_title': 'Sicherungspasswort',
+            'dialogs.error_title': 'Fehler',
+            'dialogs.unexpected_error_title': 'Unerwarteter Fehler',
+
+            'file_types.csv_files': 'CSV-Dateien',
+            'file_types.json_files': 'JSON-Dateien',
+            'file_types.secure_vault_files': 'Secure Vault Dateien',
+            'file_types.secure_vault_backup': 'Secure Vault Sicherung',
+            'file_types.all_files': 'Alle Dateien',
+
+            'about.application_name': 'Secure Vault',
+            'about.credits': 'Gebaut mit Electron und moderner Verschlüsselung',
+
+            'import.default_issuer': 'Importiert',
+            'formats.unknown_format': 'Unbekanntes Format',
+
+            'errors.password_required_encrypted': 'Passwort für verschlüsselten Export erforderlich',
+            'errors.password_required_backup': 'Passwort für verschlüsselte Sicherung erforderlich',
+            'errors.invalid_backup_format': 'Ungültiges Sicherungsformat',
+            'errors.invalid_totp_format': 'Ungültiges TOTP-URL-Format',
+            'errors.unable_initialize_vault': 'Tresor-Speicher kann nicht initialisiert werden. Bitte prüfen Sie die Dateiberechtigungen.',
+            'errors.vault_corruption_persists': 'Tresor-Speicher-Korruption besteht fort. Bitte wenden Sie sich an den Support oder löschen Sie die Tresor-Dateien manuell.',
+
+            'csv_headers.name': 'Name',
+            'csv_headers.url': 'URL',
+            'csv_headers.username': 'Benutzername',
+            'csv_headers.password': 'Passwort',
+            'csv_headers.category': 'Kategorie',
+            'csv_headers.notes': 'Notizen',
+            'csv_headers.tags': 'Tags',
+
+            'import_categories.chrome_import': 'Chrome-Import',
+            'import_categories.firefox_import': 'Firefox-Import',
+
+            'languages.english': 'Englisch',
+            'languages.german': 'Deutsch',
+
+            'time.5_minutes': '5 Minuten',
+            'time.10_minutes': '10 Minuten',
+            'time.15_minutes': '15 Minuten',
+            'time.30_minutes': '30 Minuten',
+            'time.1_hour': '1 Stunde',
+            'time.10_seconds': '10 Sekunden',
+            'time.30_seconds': '30 Sekunden',
+            'time.1_minute': '1 Minute',
+            'time.2_minutes': '2 Minuten',
+
+            'numbers.6': '6',
+            'numbers.8': '8',
+            'numbers.30': '30',
+            'numbers.60': '60',
+
+            'category_icons.folder': '📁 Ordner',
+            'category_icons.work': '💼 Arbeit',
+            'category_icons.personal': '👤 Persönlich',
+            'category_icons.social': '👥 Sozial',
+            'category_icons.shopping': '🛒 Einkaufen',
+            'category_icons.finance': '💳 Finanzen',
+            'category_icons.security': '🛡️ Sicherheit',
+            'category_icons.gaming': '🎮 Gaming',
+
+            'audit.no_issues': 'Keine Sicherheitsprobleme gefunden!',
+            'audit.password_too_short': 'Passwort zu kurz',
+            'audit.weak_password': 'Schwaches Passwort',
+            'audit.reused_password': 'Wiederverwendetes Passwort',
+            'audit.old_password': 'Altes Passwort',
+            'search.no_results': 'Keine Passwörter entsprechen Ihren Suchkriterien.',
+            'search.found_results': '{count} Passwort{plural} gefunden',
+            'categories.all_categories': 'Alle Kategorien',
+
+            'shortcuts.quick_access': 'Strg+Umschalt+V',
+            'shortcuts.auto_lock': 'Strg+Umschalt+L',
+            'keys.ctrl': 'Strg',
+            'keys.alt': 'Alt',
+            'keys.shift': 'Umschalt',
+            'keys.meta': 'Meta',
+
+            'settings.desktop': 'Desktop-Integration',
+            'settings.startup': 'Beim Systemstart starten',
+            'settings.quick_access_shortcut': 'Schnellzugriff-Tastenkürzel',
+            'settings.auto_lock_shortcut': 'Auto-Sperr-Tastenkürzel',
+            'settings.set': 'Setzen',
+            'settings.notifications': 'Benachrichtigungen aktivieren',
+            'settings.minimize_tray': 'In Systemtray minimieren',
+            'settings.advanced': 'Erweiterte Funktionen',
+
+            'search.title': 'Erweiterte Suche',
+            'search.name': 'Name',
+            'search.username': 'Benutzername',
+            'search.url': 'URL',
+            'search.category': 'Kategorie',
+            'search.tags': 'Tags (kommagetrennt)',
+            'search.weak_only': 'Nur schwache Passwörter anzeigen',
+            'search.old_only': 'Nur alte Passwörter anzeigen',
+            'search.search': 'Suchen',
+            'search.clear': 'Löschen',
+            'search.close': 'Schließen',
+            'search.all_categories': 'Alle Kategorien',
+
+            'audit.title': 'Sicherheitsaudit',
+            'audit.total_passwords': 'Passwörter gesamt',
+            'audit.weak_passwords': 'Schwache Passwörter',
+            'audit.reused_passwords': 'Wiederverwendete Passwörter',
+            'audit.old_passwords': 'Alte Passwörter',
+            'audit.close': 'Schließen',
+
+            'categories.title': 'Kategorien verwalten',
+            'categories.add_category': 'Neue Kategorie hinzufügen',
+            'categories.category_name': 'Kategoriename',
+            'categories.category_color': 'Farbe',
+            'categories.category_icon': 'Symbol',
+            'categories.save_category': 'Kategorie speichern',
+            'categories.close': 'Schließen',
+            'categories.cancel': 'Abbrechen',
+
+            'import_export.export': 'Export',
+            'import_export.import': 'Import',
+            'import_export.export_format': 'Export-Format',
+            'import_export.import_format': 'Import-Format',
+            'import_export.encryption_password': 'Verschlüsselungspasswort',
+            'import_export.decryption_password': 'Entschlüsselungspasswort',
+            'import_export.password_required': 'Erforderlich für verschlüsselte Formate',
+            'import_export.choose_file': 'Datei wählen',
+            'import_export.no_file_selected': 'Keine Datei ausgewählt',
+            'import_export.auto_detect': 'Format automatisch erkennen',
+            'import_export.close': 'Schließen',
+            'import_export.export_data': 'Daten exportieren',
+            'import_export.import_data': 'Daten importieren'
         }
     },
 
+    /**
+     * Initializes the i18n system
+     */
     init: function() {
         this.detectLanguage();
         this.setupLanguageSelector();
         this.translatePage();
     },
 
+    /**
+     * Detects the user's preferred language from localStorage or system
+     */
     detectLanguage: function() {
         var savedLanguage = localStorage.getItem('secureVaultLanguage');
         if (savedLanguage && this.translations[savedLanguage]) {
@@ -511,7 +1026,12 @@ const i18n = {
         }
     },
 
+    /**
+     * Sets up the language selector dropdown
+     */
     setupLanguageSelector: function() {
+        if (typeof document === 'undefined') return;
+
         var selector = document.getElementById('language-selector');
         if (selector) {
             selector.value = this.currentLanguage;
@@ -522,6 +1042,10 @@ const i18n = {
         }
     },
 
+    /**
+     * Sets the active language and persists the choice
+     * @param {string} language - Language code to set
+     */
     setLanguage: function(language) {
         if (this.translations[language]) {
             this.currentLanguage = language;
@@ -530,6 +1054,12 @@ const i18n = {
         }
     },
 
+    /**
+     * Translates a key to the current language
+     * @param {string} key - Translation key
+     * @param {Object} params - Parameters for string interpolation
+     * @returns {string} Translated string
+     */
     t: function(key, params) {
         params = params || {};
         var translation = this.translations[this.currentLanguage] && this.translations[this.currentLanguage][key] ||
@@ -546,7 +1076,12 @@ const i18n = {
         return result;
     },
 
+    /**
+     * Translates all elements on the page with translation attributes
+     */
     translatePage: function() {
+        if (typeof document === 'undefined') return;
+
         var self = this;
         document.querySelectorAll('[data-i18n]').forEach(function(element) {
             var key = element.getAttribute('data-i18n');
@@ -567,12 +1102,15 @@ const i18n = {
     }
 };
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() {
+// Only initialize DOM-related functionality in renderer process
+if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            i18n.init();
+        });
+    } else {
         i18n.init();
-    });
-} else {
-    i18n.init();
+    }
 }
 
 if (typeof module !== 'undefined' && module.exports) {

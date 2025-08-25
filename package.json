@@ -1,6 +1,6 @@
 {
   "name": "secure-vault",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Secure password manager and authenticator",
   "main": "main.js",
   "author": "Bavamont",
@@ -72,6 +72,7 @@
     "files": [
       "main.js",
       "renderer.js",
+      "import-export.js",
       "index.html",
       "styles.css",
       "i18n.js",

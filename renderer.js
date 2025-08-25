@@ -1,9 +1,30 @@
+/**
+ * @fileoverview Renderer process for Secure Vault - handles UI interactions and state management
+ */
+
 const { ipcRenderer } = require('electron');
 const speakeasy = require('speakeasy');
-const QRCode = require('qrcode');
 const zxcvbn = require('zxcvbn');
 const jsQR = require('jsqr');
 
+/**
+ * @typedef {Object} AppState
+ * @property {boolean} isUnlocked - Whether the vault is unlocked
+ * @property {Array} passwords - Array of password entries
+ * @property {Array} totpAccounts - Array of TOTP authentication accounts
+ * @property {Object} settings - Application settings
+ * @property {string} searchQuery - Current search query
+ * @property {string} selectedCategory - Currently selected password category
+ * @property {string|null} editingPassword - ID of password being edited
+ * @property {string|null} editingTotp - ID of TOTP account being edited
+ * @property {string} totpModalMode - Mode for TOTP modal ('manual' or 'qr')
+ * @property {NodeJS.Timeout|null} qrScanningTimeout - Timeout for QR scanning
+ * @property {NodeJS.Timeout|null} screenCaptureInterval - Interval for screen capture
+ * @property {Object} updateInfo - Information about app updates
+ * @property {NodeJS.Timeout|null} autoLockTimer - Timer for auto-lock functionality
+ * @property {Map} clipboardTimers - Map of clipboard clear timers
+ * @property {Object} deleteModal - State for delete confirmation modal
+ */
 let appState = {
     isUnlocked: false,
     passwords: [],
@@ -159,6 +180,9 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeApp();
 });
 
+/**
+ * Initializes the application by setting up event handlers, loading settings, and checking vault status
+ */
 async function initializeApp() {
     setupEventListeners();
     setupWindowControls();
@@ -234,18 +258,18 @@ function setupEventListeners() {
         }
     });
 
-    if (elements.passwordSearch) elements.passwordSearch.addEventListener('input', function(e) {
+    if (elements.passwordSearch) elements.passwordSearch.addEventListener('input', async function(e) {
         appState.searchQuery = e.target.value.toLowerCase();
-        filterPasswords();
+        await filterPasswords();
     });
 
-    if (elements.passwordCategoryFilter) elements.passwordCategoryFilter.addEventListener('change', function(e) {
+    if (elements.passwordCategoryFilter) elements.passwordCategoryFilter.addEventListener('change', async function(e) {
         appState.selectedCategory = e.target.value;
-        filterPasswords();
+        await filterPasswords();
     });
 
-    if (elements.addPasswordBtn) elements.addPasswordBtn.addEventListener('click', function() { openPasswordModal(); });
-    if (elements.addFirstPasswordBtn) elements.addFirstPasswordBtn.addEventListener('click', function() { openPasswordModal(); });
+    if (elements.addPasswordBtn) elements.addPasswordBtn.addEventListener('click', async function() { await openPasswordModal(); });
+    if (elements.addFirstPasswordBtn) elements.addFirstPasswordBtn.addEventListener('click', async function() { await openPasswordModal(); });
 
     if (elements.addTotpBtn) elements.addTotpBtn.addEventListener('click', function() { openTotpModal(null, 'qr'); });
     if (elements.addTotpManualBtn) elements.addTotpManualBtn.addEventListener('click', function() { openTotpModal(null, 'manual'); });
@@ -339,7 +363,7 @@ function setupUpdateHandlers() {
         }
     });
 
-    ipcRenderer.on('update-available', function(event, info) {
+    ipcRenderer.on('update-available', function(_event, info) {
         appState.updateInfo = {
             checking: false,
             available: true,
@@ -384,13 +408,21 @@ function setupUpdateHandlers() {
         updateDownloadProgress(progressObj);
     });
 
-    ipcRenderer.on('update-downloaded', function(event, info) {
+    ipcRenderer.on('update-downloaded', function() {
         appState.updateInfo.downloading = false;
         appState.updateInfo.downloaded = true;
         updateUpdateStatus();
         updateInstallButton();
         if (appState.isUnlocked) {
             showToast(i18n.t('toast.update_downloaded'), 'success');
+            showUpdateReadyNotification();
+        }
+    });
+
+    ipcRenderer.on('vault-auto-locked', function() {
+        if (appState.isUnlocked) {
+            lockVault();
+            showToast(i18n.t('toast.auto_locked'), 'info');
         }
     });
 }
@@ -441,6 +473,16 @@ function setupModalEventListeners() {
                 closeChangePasswordModal();
             } else if (e.target === elements.deleteModal) {
                 closeDeleteModal();
+            } else if (e.target === elements.updateModal) {
+                hideUpdateModal();
+            } else if (e.target.id === 'import-export-modal') {
+                closeImportExportModal();
+            } else if (e.target.id === 'audit-modal') {
+                closeAuditModal();
+            } else if (e.target.id === 'category-modal') {
+                closeCategoryModal();
+            } else if (e.target.id === 'search-modal') {
+                closeSearchModal();
             }
         }
     });
@@ -457,6 +499,14 @@ function setupModalEventListeners() {
                 closeDeleteModal();
             } else if (elements.updateModal.style.display === 'block') {
                 hideUpdateModal();
+            } else if (document.getElementById('import-export-modal').style.display === 'block') {
+                closeImportExportModal();
+            } else if (document.getElementById('audit-modal').style.display === 'block') {
+                closeAuditModal();
+            } else if (document.getElementById('category-modal').style.display === 'block') {
+                closeCategoryModal();
+            } else if (document.getElementById('search-modal').style.display === 'block') {
+                closeSearchModal();
             }
         }
     });
@@ -487,7 +537,6 @@ async function checkVaultSetup() {
             }
         }
     } catch (error) {
-        console.error('Error checking vault setup:', error);
         showSetupForm();
     }
 }
@@ -545,7 +594,6 @@ async function setupVault() {
             showToast(result.error || i18n.t('toast.setup_vault_failed'), 'error');
         }
     } catch (error) {
-        console.error('Error setting up vault:', error);
         showToast(i18n.t('toast.setup_vault_failed'), 'error');
     } finally {
         elements.setupVaultBtn.disabled = false;
@@ -615,6 +663,7 @@ async function unlockApplication() {
 
     await loadPasswords();
     await loadTotpAccounts();
+    await populateCategoryDropdowns();
     updateUI();
 
     if (appState.settings.autoLock) {
@@ -664,7 +713,7 @@ async function loadTotpAccounts() {
     }
 }
 
-function updatePasswordList() {
+async function updatePasswordList() {
     if (!elements.passwordList || !elements.passwordCount) return;
 
     let filteredPasswords = appState.passwords;
@@ -694,17 +743,17 @@ function updatePasswordList() {
     elements.passwordEmptyState.style.display = 'none';
     elements.passwordList.innerHTML = '';
 
-    filteredPasswords.forEach(function(password) {
-        const passwordItem = createPasswordItem(password);
+    for (const password of filteredPasswords) {
+        const passwordItem = await createPasswordItem(password);
         elements.passwordList.appendChild(passwordItem);
-    });
+    }
 }
 
-function createPasswordItem(password) {
+async function createPasswordItem(password) {
     const item = document.createElement('div');
     item.className = 'password-item';
 
-    const categoryIcon = getCategoryIcon(password.category);
+    const categoryIcon = await getCategoryIcon(password.category);
     const strengthClass = getPasswordStrengthClass(password.password);
 
     item.innerHTML =
@@ -809,12 +858,14 @@ function createTotpItem(account) {
     return item;
 }
 
-function filterPasswords() {
-    updatePasswordList();
+async function filterPasswords() {
+    await updatePasswordList();
 }
 
-function openPasswordModal(passwordId) {
+async function openPasswordModal(passwordId) {
     appState.editingPassword = passwordId;
+    
+    await populateCategoryDropdowns();
 
     if (passwordId) {
         const password = appState.passwords.find(function(p) {
@@ -902,6 +953,9 @@ function openDeleteModal(type, itemId, itemName) {
     } else if (type === 'account') {
         elements.deleteMessage.textContent = i18n.t('delete.account_message');
         elements.deleteItemLabel.textContent = i18n.t('delete.account_name');
+    } else if (type === 'category') {
+        elements.deleteMessage.textContent = i18n.t('delete.category_message');
+        elements.deleteItemLabel.textContent = i18n.t('delete.category_name');
     }
 
     elements.deleteItemName.textContent = itemName;
@@ -940,6 +994,16 @@ async function confirmDelete() {
             } else {
                 showToast(result.error || i18n.t('toast.delete_account_failed'), 'error');
             }
+        } else if (appState.deleteModal.type === 'category') {
+            const result = await ipcRenderer.invoke('delete-category', appState.deleteModal.itemId);
+            if (result.success) {
+                showToast(i18n.t('toast.category_deleted'), 'success');
+                await loadCategories();
+                await populateCategoryDropdowns();
+                await openCategoryModal(); // Refresh the category modal
+            } else {
+                showToast(i18n.t('toast.category_delete_failed'), 'error');
+            }
         }
 
         closeDeleteModal();
@@ -947,8 +1011,10 @@ async function confirmDelete() {
         console.error('Error deleting item:', error);
         if (appState.deleteModal.type === 'password') {
             showToast(i18n.t('toast.delete_password_failed'), 'error');
-        } else {
+        } else if (appState.deleteModal.type === 'account') {
             showToast(i18n.t('toast.delete_account_failed'), 'error');
+        } else if (appState.deleteModal.type === 'category') {
+            showToast(i18n.t('toast.category_delete_failed'), 'error');
         }
     } finally {
         elements.deleteModalConfirm.disabled = false;
@@ -1023,7 +1089,7 @@ function showQrScanInterface() {
                 '<div id="qr-placeholder" style="display: flex; flex-direction: column; align-items: center; justify-content: center;">' +
                     '<i class="fas fa-desktop" style="font-size: 3rem; color: var(--text-muted); margin-bottom: 1rem;"></i>' +
                     '<p style="color: var(--text-secondary); margin-bottom: 1rem; text-align: center;">' + i18n.t('authenticator.desktop_scan_description') + '</p>' +
-                    '<button type="button" class="btn btn-primary" id="start-screen-capture-btn">' +
+                    '<button type="button" class="btn btn-sm btn-outline" id="start-screen-capture-btn">' +
                         '<i class="fas fa-camera"></i>' +
                         '<span>' + i18n.t('authenticator.start_desktop_scan') + '</span>' +
                     '</button>' +
@@ -1183,6 +1249,9 @@ function findQRCodePatterns(canvas) {
     for (const point of samplePoints) {
         const imageData = ctx.getImageData(point.x - 50, point.y - 50, 100, 100);
         const hasQRPattern = detectQRPattern(imageData);
+        if (hasQRPattern) {
+            patterns.push('qr-pattern-detected');
+        }
     }
 
     return patterns;
@@ -1281,7 +1350,7 @@ function parseTotpUrl(url) {
         const urlObj = new URL(url);
 
         if (urlObj.protocol !== 'otpauth:' || urlObj.host !== 'totp') {
-            throw new Error('Invalid TOTP URL format');
+            throw new Error(i18n.t('errors.invalid_totp_format'));
         }
 
         const params = urlObj.searchParams;
@@ -1438,30 +1507,295 @@ async function changeMasterPassword() {
     }
 }
 
-async function exportVault() {
+/**
+ * Enhanced Export/Import Functions with Format Selection
+ */
+
+function openExportModal() {
+    const modal = document.getElementById('import-export-modal');
+    const title = document.getElementById('import-export-title');
+    const exportSection = document.getElementById('export-section');
+    const importSection = document.getElementById('import-section');
+    const actionButton = document.getElementById('import-export-action');
+
+    title.textContent = i18n.t('import_export.title');
+    exportSection.style.display = 'block';
+    importSection.style.display = 'none';
+    actionButton.textContent = i18n.t('common.export');
+    actionButton.onclick = performExport;
+
+    const exportFormat = document.getElementById('export-format');
+    exportFormat.onchange = function() {
+        const passwordGroup = document.getElementById('export-password-group');
+        passwordGroup.style.display = this.value === 'securevault' ? 'block' : 'none';
+    };
+
+    modal.style.display = 'flex';
+}
+
+function openImportModal() {
+    const modal = document.getElementById('import-export-modal');
+    const title = document.getElementById('import-export-title');
+    const exportSection = document.getElementById('export-section');
+    const importSection = document.getElementById('import-section');
+    const actionButton = document.getElementById('import-export-action');
+
+    title.textContent = i18n.t('import_export.title');
+    exportSection.style.display = 'none';
+    importSection.style.display = 'block';
+    actionButton.textContent = i18n.t('common.import');
+    actionButton.onclick = performImport;
+
+    const importFormat = document.getElementById('import-format');
+    importFormat.onchange = function() {
+        const passwordGroup = document.getElementById('import-password-group');
+        passwordGroup.style.display = this.value === 'securevault' ? 'block' : 'none';
+    };
+
+    const importFile = document.getElementById('import-file');
+    importFile.onchange = function() {
+        const filename = document.getElementById('import-filename');
+        filename.textContent = this.files.length > 0 ? this.files[0].name : i18n.t('common.no_file_selected');
+    };
+
+    modal.style.display = 'flex';
+}
+
+function closeImportExportModal() {
+    document.getElementById('import-export-modal').style.display = 'none';
+}
+
+async function performExport() {
     try {
-        const result = await ipcRenderer.invoke('export-vault');
+        const format = document.getElementById('export-format').value;
+        const password = document.getElementById('export-password').value;
+
+        const result = await ipcRenderer.invoke('export-vault', format, password || null);
         if (result.success && !result.canceled) {
-            showToast(i18n.t('toast.vault_exported'), 'success');
+            showToast(i18n.t('toast.exported_entries', { count: result.count || 0, format: format }), 'success');
+            closeImportExportModal();
         }
     } catch (error) {
         console.error('Error exporting vault:', error);
-        showToast(i18n.t('toast.export_vault_failed'), 'error');
+        showToast(i18n.t('toast.export_failed') + ': ' + error.message, 'error');
     }
 }
 
-async function importVault() {
+async function performImport() {
     try {
-        const result = await ipcRenderer.invoke('import-vault');
-        if (result.success && !result.canceled) {
-            showToast(i18n.t('toast.vault_imported'), 'success');
+        const file = document.getElementById('import-file').files[0];
+        if (!file) {
+            showToast(i18n.t('toast.import_no_file'), 'error');
+            return;
+        }
+
+        const password = document.getElementById('import-password').value;
+        const format = document.getElementById('import-format').value;
+        
+        const fileContent = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = reject;
+            reader.readAsText(file);
+        });
+
+        const result = await ipcRenderer.invoke('import-from-content', {
+            filename: file.name,
+            content: fileContent,
+            format: format === 'auto' ? null : format,
+            password: password || null
+        });
+
+        if (result.success) {
+            let message = i18n.t('toast.imported_entries', { count: result.imported || 0, format: result.format });
+            if (result.passwordCount && result.totpCount) {
+                message += ` (${result.passwordCount} passwords, ${result.totpCount} TOTP accounts)`;
+            } else if (result.passwordCount) {
+                message += ` (${result.passwordCount} passwords)`;
+            } else if (result.totpCount) {
+                message += ` (${result.totpCount} TOTP accounts)`;
+            }
+            
+            showToast(message, 'success');
             await loadPasswords();
             await loadTotpAccounts();
+            closeImportExportModal();
+        } else {
+            showToast(i18n.t('toast.import_failed') + ': ' + (result.error || 'Unknown error'), 'error');
         }
     } catch (error) {
         console.error('Error importing vault:', error);
-        showToast(i18n.t('toast.import_vault_failed'), 'error');
+        showToast(i18n.t('toast.import_failed') + ': ' + error.message, 'error');
     }
+}
+
+async function exportVault() {
+    openExportModal();
+}
+
+async function importVault() {
+    openImportModal();
+}
+
+/**
+ * Password Security Audit Functions
+ */
+
+async function openAuditModal() {
+    const modal = document.getElementById('audit-modal');
+    modal.style.display = 'flex';
+
+    try {
+        const result = await ipcRenderer.invoke('audit-passwords');
+        if (result.success) {
+            displayAuditResults(result.audit);
+        } else {
+            showToast(i18n.t('toast.audit_failed') + ': ' + result.error, 'error');
+        }
+    } catch (error) {
+        showToast(i18n.t('toast.audit_failed') + ': ' + error.message, 'error');
+    }
+}
+
+function closeAuditModal() {
+    document.getElementById('audit-modal').style.display = 'none';
+}
+
+function displayAuditResults(audit) {
+    document.getElementById('total-passwords').textContent = audit.total;
+    document.getElementById('weak-passwords').textContent = audit.weak;
+    document.getElementById('reused-passwords').textContent = audit.reused;
+    document.getElementById('old-passwords').textContent = audit.old;
+
+    const detailsContainer = document.getElementById('audit-details');
+    detailsContainer.innerHTML = '';
+
+    if (audit.details.length === 0) {
+        detailsContainer.innerHTML = '<div class="audit-success"><i class="fas fa-check-circle"></i> ' + i18n.t('audit.no_issues') + '</div>';
+        return;
+    }
+
+    audit.details.forEach(function(detail) {
+        const issueItem = document.createElement('div');
+        issueItem.className = 'audit-issue';
+
+        const issueText = detail.issues.map(function(issue) {
+            switch(issue) {
+            case 'too_short': return i18n.t('audit.password_too_short');
+            case 'weak': return i18n.t('audit.weak_password');
+            case 'reused': return i18n.t('audit.reused_password');
+            case 'old': return i18n.t('audit.old_password');
+            default: return issue;
+            }
+        }).join(', ');
+
+        issueItem.innerHTML = `
+            <div class="issue-header">
+                <span class="issue-name">${escapeHtml(detail.name)}</span>
+                <span class="issue-badges">
+                    ${detail.issues.map(issue => `<span class="badge badge-${issue === 'reused' ? 'warning' : 'danger'}">${issue.replace('_', ' ')}</span>`).join('')}
+                </span>
+            </div>
+        `;
+
+        detailsContainer.appendChild(issueItem);
+    });
+}
+
+/**
+ * Category Management Functions
+ */
+
+async function openCategoryModal() {
+    const modal = document.getElementById('category-modal');
+    modal.style.display = 'flex';
+    await loadCategories();
+}
+
+function closeCategoryModal() {
+    document.getElementById('category-modal').style.display = 'none';
+}
+
+async function loadCategories() {
+    try {
+        const result = await ipcRenderer.invoke('get-categories');
+        if (result.success) {
+            displayCategories(result.categories);
+        }
+    } catch (error) {
+        console.error('Error loading categories:', error);
+        showToast(i18n.t('toast.category_load_failed'), 'error');
+    }
+}
+
+function displayCategories(categories) {
+    const container = document.getElementById('categories-list');
+    container.innerHTML = '';
+
+    categories.forEach(function(category) {
+        const categoryItem = document.createElement('div');
+        categoryItem.className = 'category-item';
+        categoryItem.innerHTML = `
+            <div class="category-info">
+                <div class="category-color" style="background-color: ${category.color}"></div>
+                <span class="category-icon">${getCategoryIconFromType(category.icon)}</span>
+                <span class="category-name">${escapeHtml(category.name)}</span>
+            </div>
+            <div class="category-actions">
+                <button class="btn btn-sm btn-outline btn-danger" onclick="deleteCategory('${category.id}', '${escapeHtml(category.name)}')">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        `;
+        container.appendChild(categoryItem);
+    });
+}
+
+function showAddCategoryForm() {
+    const form = document.getElementById('add-category-form');
+    form.style.display = 'block';
+    document.getElementById('category-name').focus();
+}
+
+function cancelAddCategory() {
+    const form = document.getElementById('add-category-form');
+    form.style.display = 'none';
+    document.getElementById('category-name').value = '';
+    document.getElementById('category-color').value = '#6366f1';
+    document.getElementById('category-icon').value = 'folder';
+}
+
+async function saveCategory() {
+    const name = document.getElementById('category-name').value.trim();
+    const color = document.getElementById('category-color').value;
+    const icon = document.getElementById('category-icon').value;
+
+    if (!name) {
+        showToast(i18n.t('toast.category_name_required'), 'error');
+        return;
+    }
+
+    try {
+        const category = { name, color, icon };
+        const result = await ipcRenderer.invoke('save-category', category);
+
+        if (result.success) {
+            showToast(i18n.t('toast.category_saved'), 'success');
+            cancelAddCategory();
+            await loadCategories();
+            await loadPasswords();
+            await populateCategoryDropdowns();
+        } else {
+            showToast(i18n.t('toast.category_save_failed') + ': ' + result.error, 'error');
+        }
+    } catch (error) {
+        console.error('Error saving category:', error);
+        showToast(i18n.t('toast.category_save_failed'), 'error');
+    }
+}
+
+function deleteCategory(categoryId, categoryName) {
+    openDeleteModal('category', categoryId, categoryName);
 }
 
 window.copyUsername = async function(passwordId) {
@@ -1550,6 +1884,303 @@ function getTotpTimeRemaining(period) {
     return period - (now % period);
 }
 
+/**
+ * Advanced Search Functions
+ */
+
+async function openSearchModal() {
+    const modal = document.getElementById('search-modal');
+    modal.style.display = 'flex';
+
+    document.getElementById('search-name').value = '';
+    document.getElementById('search-username').value = '';
+    document.getElementById('search-url').value = '';
+    document.getElementById('search-category').value = '';
+    document.getElementById('search-tags').value = '';
+    document.getElementById('search-weak-only').checked = false;
+    document.getElementById('search-old-only').checked = false;
+
+    await loadCategoriesForSearch();
+}
+
+function closeSearchModal() {
+    document.getElementById('search-modal').style.display = 'none';
+    document.getElementById('search-results').innerHTML = '';
+}
+
+async function loadCategoriesForSearch() {
+    try {
+        const result = await ipcRenderer.invoke('get-categories');
+        if (result.success) {
+            const select = document.getElementById('search-category');
+            select.innerHTML = '<option value="">' + i18n.t('categories.all_categories') + '</option>';
+
+            result.categories.forEach(function(category) {
+                const option = document.createElement('option');
+                option.value = category.name;
+                option.textContent = category.name;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading categories for search:', error);
+    }
+}
+
+async function populateCategoryDropdowns() {
+    try {
+        const filterSelect = document.getElementById('password-category-filter');
+        const passwordSelect = document.getElementById('password-category');
+        
+        const result = await ipcRenderer.invoke('get-categories');
+        
+        if (result.success && result.categories) {
+            if (filterSelect) {
+                filterSelect.innerHTML = '<option value="">' + i18n.t('passwords.all_categories') + '</option>';
+                
+                result.categories.forEach(function(category) {
+                    const option = document.createElement('option');
+                    option.value = category.name;
+                    option.textContent = category.name;
+                    option.style.color = category.color || '#6366f1';
+                    filterSelect.appendChild(option);
+                });
+            }
+
+            if (passwordSelect) {
+                passwordSelect.innerHTML = '';
+                
+                result.categories.forEach(function(category) {
+                    const option = document.createElement('option');
+                    option.value = category.name;
+                    option.textContent = category.name;
+                    option.style.color = category.color || '#6366f1';
+                    passwordSelect.appendChild(option);
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Error loading categories:', error);
+    }
+}
+
+async function performAdvancedSearch() {
+    const criteria = {
+        name: document.getElementById('search-name').value,
+        username: document.getElementById('search-username').value,
+        url: document.getElementById('search-url').value,
+        category: document.getElementById('search-category').value,
+        tags: document.getElementById('search-tags').value.split(',').map(function(tag) { return tag.trim(); }).filter(Boolean),
+        weakOnly: document.getElementById('search-weak-only').checked,
+        oldOnly: document.getElementById('search-old-only').checked
+    };
+
+    try {
+        const result = await ipcRenderer.invoke('search-passwords', criteria);
+        if (result.success) {
+            displaySearchResults(result.passwords);
+        } else {
+            showToast(i18n.t('toast.search_failed') + ': ' + result.error, 'error');
+        }
+    } catch (error) {
+        console.error('Error performing advanced search:', error);
+        showToast(i18n.t('toast.search_failed') + ': ' + error.message, 'error');
+    }
+}
+
+function displaySearchResults(passwords) {
+    const container = document.getElementById('search-results');
+    container.innerHTML = '';
+
+    if (passwords.length === 0) {
+        container.innerHTML = '<div class="no-results"><i class="fas fa-search"></i> ' + i18n.t('search.no_results') + '</div>';
+        return;
+    }
+
+    const plural = passwords.length === 1 ? '' : 's';
+    const headerText = i18n.t('search.found_results').replace('{count}', passwords.length).replace('{plural}', plural);
+    container.innerHTML = `<div class="search-header">${headerText}</div>`;
+
+    passwords.forEach(function(password) {
+        const passwordItem = document.createElement('div');
+        passwordItem.className = 'search-result-item';
+        passwordItem.innerHTML = `
+            <div class="password-info">
+                <div class="password-name">${escapeHtml(password.name)}</div>
+                <div class="password-details">
+                    <span class="password-username">${escapeHtml(password.username)}</span>
+                    ${password.url ? `<span class="password-url">${escapeHtml(password.url)}</span>` : ''}
+                </div>
+                <div class="password-meta">
+                    <span class="password-category">${escapeHtml(password.category)}</span>
+                    ${password.tags && password.tags.length > 0 ? `<span class="password-tags">${password.tags.map(function(tag) { return escapeHtml(tag); }).join(', ')}</span>` : ''}
+                </div>
+            </div>
+            <div class="password-actions">
+                <button class="btn btn-sm btn-outline" onclick="copyUsername('${password.id}')">
+                    <i class="fas fa-user"></i>
+                </button>
+                <button class="btn btn-sm btn-outline" onclick="copyPassword('${password.id}')">
+                    <i class="fas fa-key"></i>
+                </button>
+                ${password.url ? `<button class="btn btn-sm btn-outline" onclick="visitWebsite('${password.id}')">
+                    <i class="fas fa-external-link-alt"></i>
+                </button>` : ''}
+                <button class="btn btn-sm btn-outline" onclick="editPassword('${password.id}'); closeSearchModal();">
+                    <i class="fas fa-edit"></i>
+                </button>
+            </div>
+        `;
+        container.appendChild(passwordItem);
+    });
+}
+
+function clearSearchFilters() {
+    document.getElementById('search-name').value = '';
+    document.getElementById('search-username').value = '';
+    document.getElementById('search-url').value = '';
+    document.getElementById('search-category').value = '';
+    document.getElementById('search-tags').value = '';
+    document.getElementById('search-weak-only').checked = false;
+    document.getElementById('search-old-only').checked = false;
+    document.getElementById('search-results').innerHTML = '';
+}
+
+/**
+ * Settings Modal Functions
+ */
+
+let settingsData = {
+    startupEnabled: false,
+    shortcuts: {
+        quickAccess: i18n.t('shortcuts.quick_access'),
+        autoLock: i18n.t('shortcuts.auto_lock')
+    },
+    clipboardTimeout: 30,
+    notificationsEnabled: true,
+    autoLockTimeout: 1800,
+    closeToTray: true
+};
+
+
+async function loadSettings() {
+    try {
+        const startupResult = await ipcRenderer.invoke('get-startup-status');
+        if (startupResult.success) {
+            document.getElementById('startup-enabled').checked = startupResult.enabled;
+            settingsData.startupEnabled = startupResult.enabled;
+        }
+
+        const settingsResult = await ipcRenderer.invoke('get-app-settings');
+        if (settingsResult.success && settingsResult.settings) {
+            const settings = settingsResult.settings;
+
+            document.getElementById('clipboard-timeout').value = settings.clipboardTimeout || 30;
+            document.getElementById('notifications-enabled').checked = settings.notificationsEnabled !== false;
+            document.getElementById('auto-lock-timeout').value = settings.autoLockTimeout || 1800;
+            document.getElementById('close-to-tray').checked = settings.closeToTray !== false;
+
+            if (settings.shortcuts) {
+                document.getElementById('quick-access-shortcut').value = settings.shortcuts.quickAccess || '';
+                document.getElementById('auto-lock-shortcut').value = settings.shortcuts.autoLock || '';
+            }
+
+            settingsData = { ...settingsData, ...settings };
+        }
+    } catch (error) {
+        console.error('Error loading settings:', error);
+        showToast(i18n.t('toast.settings_load_failed'), 'error');
+    }
+}
+
+async function saveSettings() {
+    try {
+        const newSettings = {
+            clipboardTimeout: parseInt(document.getElementById('clipboard-timeout').value),
+            notificationsEnabled: document.getElementById('notifications-enabled').checked,
+            autoLockTimeout: parseInt(document.getElementById('auto-lock-timeout').value),
+            closeToTray: document.getElementById('close-to-tray').checked,
+            shortcuts: {
+                quickAccess: document.getElementById('quick-access-shortcut').value,
+                autoLock: document.getElementById('auto-lock-shortcut').value
+            }
+        };
+
+        const startupEnabled = document.getElementById('startup-enabled').checked;
+        if (startupEnabled !== settingsData.startupEnabled) {
+            const startupResult = await ipcRenderer.invoke('set-startup', startupEnabled);
+            if (!startupResult.success) {
+                showToast(i18n.t('toast.startup_setting_failed') + ': ' + startupResult.error, 'error');
+                return;
+            }
+        }
+
+        const result = await ipcRenderer.invoke('save-app-settings', newSettings);
+        if (result.success) {
+            settingsData = { ...settingsData, ...newSettings };
+            showToast(i18n.t('toast.settings_saved'), 'success');
+        } else {
+            showToast(i18n.t('toast.settings_save_failed') + ': ' + result.error, 'error');
+        }
+    } catch (error) {
+        console.error('Error saving settings:', error);
+        showToast(i18n.t('toast.settings_save_failed'), 'error');
+    }
+}
+
+function recordShortcut(shortcutType) {
+    const input = document.getElementById(shortcutType + '-shortcut');
+    const button = input.nextElementSibling;
+
+    button.textContent = i18n.t('common.press_keys');
+    button.disabled = true;
+
+    const handleKeyDown = function(event) {
+        event.preventDefault();
+
+        const keys = [];
+        if (event.ctrlKey) keys.push(i18n.t('keys.ctrl'));
+        if (event.altKey) keys.push(i18n.t('keys.alt'));
+        if (event.shiftKey) keys.push(i18n.t('keys.shift'));
+        if (event.metaKey) keys.push(i18n.t('keys.meta'));
+
+        if (event.key && !['Control', 'Alt', 'Shift', 'Meta'].includes(event.key)) {
+            keys.push(event.key.toUpperCase());
+        }
+
+        if (keys.length >= 2) {
+            const shortcut = keys.join('+');
+            input.value = shortcut;
+
+            document.removeEventListener('keydown', handleKeyDown);
+            button.textContent = i18n.t('common.set');
+            button.disabled = false;
+        }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+
+    setTimeout(function() {
+        document.removeEventListener('keydown', handleKeyDown);
+        button.textContent = i18n.t('common.set');
+        button.disabled = false;
+    }, 10000);
+}
+
+async function exportBackup() {
+    try {
+        const result = await ipcRenderer.invoke('export-secure-backup');
+        if (result.success) {
+            showToast(i18n.t('toast.backup_exported'), 'success');
+        } else {
+            showToast(i18n.t('toast.export_failed') + ': ' + result.error, 'error');
+        }
+    } catch (error) {
+        console.error('Error exporting backup:', error);
+        showToast(i18n.t('toast.export_failed') + ': ' + error.message, 'error');
+    }
+}
+
 function startTotpCountdown() {
     setInterval(function() {
         if (!appState.isUnlocked) return;
@@ -1633,16 +2264,45 @@ function updatePasswordStrength(input, strengthElement) {
         '<div class="strength-text">' + strength.text + '</div>';
 }
 
-function getCategoryIcon(category) {
-    const icons = {
-        website: 'fa-globe',
-        app: 'fa-desktop',
-        email: 'fa-envelope',
-        social: 'fa-users',
-        financial: 'fa-credit-card',
-        other: 'fa-folder'
+/**
+ * Gets the icon HTML from icon type
+ * @param {string} iconType - The icon type
+ * @returns {string} HTML string for the icon
+ */
+function getCategoryIconFromType(iconType) {
+    const iconMap = {
+        folder: 'fa-folder',
+        briefcase: 'fa-briefcase',
+        user: 'fa-user',
+        users: 'fa-users',
+        'shopping-cart': 'fa-shopping-cart',
+        'credit-card': 'fa-credit-card',
+        shield: 'fa-shield-alt',
+        gamepad: 'fa-gamepad'
     };
-    return icons[category] || icons.other;
+    return iconMap[iconType] || 'fa-folder';
+}
+
+/**
+ * Gets the icon HTML for a category by looking up the category in the stored categories
+ * @param {string} categoryName - The name of the category
+ * @returns {Promise<string>} HTML string for the category icon
+ */
+async function getCategoryIcon(categoryName) {
+    try {
+        const result = await ipcRenderer.invoke('get-categories');
+        if (result.success && result.categories) {
+            const category = result.categories.find(function(cat) {
+                return cat.name === categoryName;
+            });
+            if (category && category.icon) {
+                return getCategoryIconFromType(category.icon);
+            }
+        }
+    } catch (error) {
+        console.error('Error getting category icon:', error);
+    }
+    return 'fa-folder';
 }
 
 function getPasswordStrengthClass(password) {
@@ -1938,6 +2598,48 @@ function showToast(message, type) {
                 toast.parentNode.removeChild(toast);
             }
         });
+    }
+}
+
+/**
+ * Shows a notification when update is ready to install
+ */
+function showUpdateReadyNotification() {
+    const notification = document.createElement('div');
+    notification.className = 'update-notification';
+    notification.innerHTML = `
+        <div class="update-notification-content">
+            <i class="fas fa-download"></i>
+            <div class="update-notification-text">
+                <h4>${i18n.t('updater.ready_to_install')}</h4>
+                <p>${i18n.t('updater.restart_to_apply')}</p>
+            </div>
+            <div class="update-notification-actions">
+                <button class="btn btn-sm btn-outline" onclick="installUpdate()">${i18n.t('updater.install_now')}</button>
+                <button class="btn btn-sm btn-outline" onclick="dismissUpdateNotification()">${i18n.t('common.later')}</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(notification);
+
+    setTimeout(function() {
+        notification.classList.add('show');
+    }, 100);
+}
+
+/**
+ * Dismisses the update notification
+ */
+function dismissUpdateNotification() {
+    const notification = document.querySelector('.update-notification');
+    if (notification) {
+        notification.classList.remove('show');
+        setTimeout(function() {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 300);
     }
 }
 

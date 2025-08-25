@@ -112,8 +112,8 @@
                         <span data-i18n="updater.check_updates">Check for Updates</span>
                     </button>
                     <select id="language-selector" class="language-selector">
-                        <option value="en">English</option>
-                        <option value="de">Deutsch</option>
+                        <option value="en" data-i18n="languages.english">English</option>
+                        <option value="de" data-i18n="languages.german">Deutsch</option>
                     </select>
                 </div>
             </div>
@@ -162,6 +162,18 @@
                                     <i class="fas fa-plus"></i>
                                     <span data-i18n="passwords.add_password">Add Password</span>
                                 </button>
+                                <button class="btn btn-outline" id="advanced-search-btn" onclick="openSearchModal()">
+                                    <i class="fas fa-search-plus"></i>
+                                    <span data-i18n="settings.action_advanced_search">Advanced Search</span>
+                                </button>
+                                <button class="btn btn-outline" id="audit-passwords-btn" onclick="openAuditModal()">
+                                    <i class="fas fa-shield-alt"></i>
+                                    <span data-i18n="settings.action_security_audit">Security Audit</span>
+                                </button>
+                                <button class="btn btn-outline" id="manage-categories-btn" onclick="openCategoryModal()">
+                                    <i class="fas fa-folder"></i>
+                                    <span data-i18n="settings.action_categories">Categories</span>
+                                </button>
                             </div>
                         </div>
                         <div class="card-body">
@@ -173,12 +185,6 @@
                                 <div class="search-filters">
                                     <select id="password-category-filter">
                                         <option value="" data-i18n="passwords.all_categories">All Categories</option>
-                                        <option value="website" data-i18n="passwords.category_website">Website</option>
-                                        <option value="app" data-i18n="passwords.category_app">Application</option>
-                                        <option value="email" data-i18n="passwords.category_email">Email</option>
-                                        <option value="social" data-i18n="passwords.category_social">Social Media</option>
-                                        <option value="financial" data-i18n="passwords.category_financial">Financial</option>
-                                        <option value="other" data-i18n="passwords.category_other">Other</option>
                                     </select>
                                 </div>
                             </div>
@@ -293,11 +299,11 @@
                                         <span data-i18n="settings.auto_lock_time">Auto-lock time (minutes)</span>
                                     </label>
                                     <select id="auto-lock-time">
-                                        <option value="5">5 minutes</option>
-                                        <option value="10">10 minutes</option>
-                                        <option value="15" selected>15 minutes</option>
-                                        <option value="30">30 minutes</option>
-                                        <option value="60">1 hour</option>
+                                        <option value="5" data-i18n="time.5_minutes">5 minutes</option>
+                                        <option value="10" data-i18n="time.10_minutes">10 minutes</option>
+                                        <option value="15" selected data-i18n="time.15_minutes">15 minutes</option>
+                                        <option value="30" data-i18n="time.30_minutes">30 minutes</option>
+                                        <option value="60" data-i18n="time.1_hour">1 hour</option>
                                     </select>
                                 </div>
 
@@ -313,10 +319,10 @@
                                         <span data-i18n="settings.clipboard_timeout">Clipboard timeout (seconds)</span>
                                     </label>
                                     <select id="clipboard-timeout">
-                                        <option value="10">10 seconds</option>
-                                        <option value="30" selected>30 seconds</option>
-                                        <option value="60">1 minute</option>
-                                        <option value="120">2 minutes</option>
+                                        <option value="10" data-i18n="time.10_seconds">10 seconds</option>
+                                        <option value="30" selected data-i18n="time.30_seconds">30 seconds</option>
+                                        <option value="60" data-i18n="time.1_minute">1 minute</option>
+                                        <option value="120" data-i18n="time.2_minutes">2 minutes</option>
                                     </select>
                                 </div>
                             </div>
@@ -357,31 +363,95 @@
                             </div>
                         </div>
 
+
                         <div class="card settings-card">
                             <div class="card-header">
-                                <h3><i class="fas fa-sync-alt"></i> <span data-i18n="updater.title">App Updater</span></h3>
+                                <h3><i class="fas fa-desktop"></i> <span data-i18n="settings.desktop">Desktop Integration</span></h3>
                             </div>
                             <div class="card-body">
-                                <div class="update-info">
-                                    <div class="form-group">
-                                        <label><i class="fas fa-tag"></i> <span data-i18n="updater.current_version">Current Version:</span></label>
-                                        <div class="version-display" id="current-version">1.0.0</div>
-                                    </div>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="startup-enabled">
+                                    <span class="checkbox-custom"></span>
+                                    <span data-i18n="settings.startup">Launch on system startup</span>
+                                </label>
 
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" id="auto-check-updates" checked>
-                                        <span class="checkbox-custom"></span>
-                                        <span data-i18n="updater.auto_check">Check for updates automatically</span>
+                                <div class="form-group">
+                                    <label for="quick-access-shortcut">
+                                        <i class="fas fa-keyboard"></i>
+                                        <span data-i18n="settings.quick_access_shortcut">Quick Access Shortcut</span>
                                     </label>
-
-                                    <div class="update-actions">
-                                        <button class="btn btn-outline" id="manual-check-updates">
-                                            <i class="fas fa-sync-alt"></i>
-                                            <span data-i18n="updater.check_updates">Check for Updates</span>
+                                    <div class="shortcut-input-group">
+                                        <input type="text" id="quick-access-shortcut" data-i18n-placeholder="common.press_keys" readonly>
+                                        <button class="btn btn-sm btn-outline" onclick="recordShortcut('quick-access')">
+                                            <span data-i18n="settings.set">Set</span>
                                         </button>
                                     </div>
+                                </div>
 
-                                    <div class="update-status" id="update-status"></div>
+                                <div class="form-group">
+                                    <label for="auto-lock-shortcut">
+                                        <i class="fas fa-lock"></i>
+                                        <span data-i18n="settings.auto_lock_shortcut">Auto-Lock Shortcut</span>
+                                    </label>
+                                    <div class="shortcut-input-group">
+                                        <input type="text" id="auto-lock-shortcut" data-i18n-placeholder="common.press_keys" readonly>
+                                        <button class="btn btn-sm btn-outline" onclick="recordShortcut('auto-lock')">
+                                            <span data-i18n="settings.set">Set</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="notifications-enabled" checked>
+                                    <span class="checkbox-custom"></span>
+                                    <span data-i18n="settings.notifications">Enable notifications</span>
+                                </label>
+
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="close-to-tray" checked>
+                                    <span class="checkbox-custom"></span>
+                                    <span data-i18n="settings.minimize_tray">Minimize to system tray</span>
+                                </label>
+                            </div>
+                        </div>
+
+
+                        <div class="card settings-card">
+                            <div class="card-header">
+                                <h3><i class="fas fa-search"></i> <span data-i18n="settings.advanced">Advanced Features</span></h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <button class="btn btn-outline" onclick="openSearchModal()">
+                                        <i class="fas fa-search-plus"></i>
+                                        <span data-i18n="settings.advanced_search">Advanced Search</span>
+                                    </button>
+                                    <div class="input-help">
+                                        <i class="fas fa-info-circle"></i>
+                                        <span data-i18n="settings.advanced_search_help">Search passwords with advanced filters</span>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <button class="btn btn-outline" onclick="openAuditModal()">
+                                        <i class="fas fa-shield-alt"></i>
+                                        <span data-i18n="settings.security_audit">Security Audit</span>
+                                    </button>
+                                    <div class="input-help">
+                                        <i class="fas fa-info-circle"></i>
+                                        <span data-i18n="settings.security_audit_help">Analyze password security and find weak passwords</span>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <button class="btn btn-outline" onclick="openCategoryModal()">
+                                        <i class="fas fa-folder"></i>
+                                        <span data-i18n="settings.manage_categories">Manage Categories</span>
+                                    </button>
+                                    <div class="input-help">
+                                        <i class="fas fa-info-circle"></i>
+                                        <span data-i18n="settings.manage_categories_help">Create and organize password categories</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -417,6 +487,11 @@
                                     <li data-i18n="help.feature5">Secure backup and restore functionality</li>
                                     <li data-i18n="help.feature6">Cross-platform compatibility</li>
                                     <li data-i18n="help.feature7">Desktop QR code scanning for easy TOTP setup</li>
+                                    <li data-i18n="help.feature8">System tray integration with minimize to tray functionality</li>
+                                    <li data-i18n="help.feature9">Advanced search with filters and criteria</li>
+                                    <li data-i18n="help.feature10">Security audit to identify weak and compromised passwords</li>
+                                    <li data-i18n="help.feature11">Password categorization and organization</li>
+                                    <li data-i18n="help.feature12">Enhanced import/export with multiple format support</li>
                                 </ul>
                             </div>
                         </div>
@@ -475,6 +550,35 @@
                                 </div>
                             </div>
                         </div>
+
+                        <div class="card help-card">
+                            <div class="card-header">
+                                <h3><i class="fas fa-sync-alt"></i> <span data-i18n="updater.title">App Updater</span></h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="update-info">
+                                    <div class="form-group">
+                                        <label><i class="fas fa-tag"></i> <span data-i18n="updater.current_version">Current Version:</span></label>
+                                        <div class="version-display" id="current-version">1.0.0</div>
+                                    </div>
+
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="auto-check-updates" checked>
+                                        <span class="checkbox-custom"></span>
+                                        <span data-i18n="updater.auto_check">Check for updates automatically</span>
+                                    </label>
+
+                                    <div class="update-actions">
+                                        <button class="btn btn-outline" id="manual-check-updates">
+                                            <i class="fas fa-sync-alt"></i>
+                                            <span data-i18n="updater.check_updates">Check for Updates</span>
+                                        </button>
+                                    </div>
+
+                                    <div class="update-status" id="update-status"></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -486,6 +590,7 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h3><i class="fas fa-key"></i> <span id="password-modal-title" data-i18n="passwords.add_password">Add Password</span></h3>
+                    <button class="close-btn" onclick="closePasswordModal()">&times;</button>
                 </div>
                 <div class="modal-body">
                     <form id="password-form">
@@ -536,12 +641,6 @@
                                 <span data-i18n="passwords.category">Category</span>
                             </label>
                             <select id="password-category">
-                                <option value="website" data-i18n="passwords.category_website">Website</option>
-                                <option value="app" data-i18n="passwords.category_app">Application</option>
-                                <option value="email" data-i18n="passwords.category_email">Email</option>
-                                <option value="social" data-i18n="passwords.category_social">Social Media</option>
-                                <option value="financial" data-i18n="passwords.category_financial">Financial</option>
-                                <option value="other" data-i18n="passwords.category_other">Other</option>
                             </select>
                         </div>
 
@@ -570,6 +669,7 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h3><i class="fas fa-mobile-alt"></i> <span id="totp-modal-title" data-i18n="authenticator.add_account">Add Account</span></h3>
+                    <button class="close-btn" onclick="closeTotpModal()">&times;</button>
                 </div>
                 <div class="modal-body">
                     <form id="totp-form">
@@ -604,8 +704,8 @@
                                     <span data-i18n="authenticator.digits">Digits</span>
                                 </label>
                                 <select id="totp-digits">
-                                    <option value="6" selected>6</option>
-                                    <option value="8">8</option>
+                                    <option value="6" selected data-i18n="numbers.6">6</option>
+                                    <option value="8" data-i18n="numbers.8">8</option>
                                 </select>
                             </div>
 
@@ -615,8 +715,8 @@
                                     <span data-i18n="authenticator.period">Period (seconds)</span>
                                 </label>
                                 <select id="totp-period">
-                                    <option value="30" selected>30</option>
-                                    <option value="60">60</option>
+                                    <option value="30" selected data-i18n="numbers.30">30</option>
+                                    <option value="60" data-i18n="numbers.60">60</option>
                                 </select>
                             </div>
                         </div>
@@ -638,6 +738,7 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h3><i class="fas fa-key"></i> <span data-i18n="settings.change_master_password">Change Master Password</span></h3>
+                    <button class="close-btn" onclick="closeChangePasswordModal()">&times;</button>
                 </div>
                 <div class="modal-body">
                     <form id="change-password-form">
@@ -694,7 +795,7 @@
             </div>
         </div>
 
-        <div id="delete-modal" class="modal" style="display: none;">
+        <div class="modal" id="delete-modal" style="display: none;">
             <div class="modal-content">
                 <div class="modal-header">
                     <h3><i class="fas fa-exclamation-triangle"></i> <span data-i18n="delete.title">Confirm Delete</span></h3>
@@ -725,7 +826,7 @@
             </div>
         </div>
 
-        <div id="update-modal" class="modal" style="display: none;">
+        <div class="modal" id="update-modal" style="display: none;">
             <div class="modal-content">
                 <div class="modal-header">
                     <h3><i class="fas fa-download"></i> <span data-i18n="updater.available">Update Available</span></h3>
@@ -773,7 +874,219 @@
                 </div>
             </div>
         </div>
+
+    <!-- Enhanced Import/Export Modal -->
+    <div id="import-export-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="import-export-title">Export/Import Vault</h3>
+                <button class="close-btn" onclick="closeImportExportModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="export-section">
+                    <div class="form-group">
+                        <label for="export-format" data-i18n="import_export.export_format_label">Export Format</label>
+                        <select id="export-format" class="form-control">
+                            <option value="json" data-i18n="formats.json">Secure Vault JSON (Recommended)</option>
+                            <option value="csv" data-i18n="formats.csv">Generic CSV</option>
+                            <option value="securevault" data-i18n="formats.securevault">Encrypted Secure Vault</option>
+                            <option value="lastpass" data-i18n="formats.lastpass">LastPass CSV</option>
+                            <option value="bitwarden" data-i18n="formats.bitwarden">Bitwarden JSON</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="export-password-group" style="display: none;">
+                        <label for="export-password" data-i18n="import_export.encryption_password_label">Encryption Password</label>
+                        <input type="password" id="export-password" class="form-control" data-i18n-placeholder="import_export.export_password_placeholder" placeholder="Password for encrypted export">
+                        <div class="input-help" data-i18n="common.required_encrypted">Required for encrypted formats</div>
+                    </div>
+                </div>
+                
+                <div id="import-section" style="display: none;">
+                    <div class="form-group">
+                        <label for="import-format" data-i18n="import_export.import_format_label">Import Format</label>
+                        <select id="import-format" class="form-control">
+                            <option value="auto" data-i18n="formats.auto">Auto-detect format</option>
+                            <option value="json" data-i18n="formats.json_simple">JSON</option>
+                            <option value="csv" data-i18n="formats.csv_simple">CSV</option>
+                            <option value="lastpass" data-i18n="formats.lastpass">LastPass CSV</option>
+                            <option value="bitwarden" data-i18n="formats.bitwarden">Bitwarden JSON</option>
+                            <option value="keepass" data-i18n="formats.keepass">KeePass CSV</option>
+                            <option value="chrome" data-i18n="formats.chrome">Chrome CSV</option>
+                            <option value="firefox" data-i18n="formats.firefox">Firefox JSON</option>
+                            <option value="winauth" data-i18n="formats.winauth">WinAuth TXT</option>
+                            <option value="securevault" data-i18n="formats.securevault">Encrypted Secure Vault</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="import-password-group" style="display: none;">
+                        <label for="import-password" data-i18n="import_export.decryption_password_label">Decryption Password</label>
+                        <input type="password" id="import-password" class="form-control" data-i18n-placeholder="import_export.import_password_placeholder" placeholder="Password for encrypted import">
+                        <div class="input-help" data-i18n="common.required_encrypted">Required for encrypted formats</div>
+                    </div>
+                    <div class="form-group">
+                        <input type="file" id="import-file" accept=".json,.csv,.txt,.wa.txt,.svault" style="display: none;">
+                        <button class="btn btn-outline" onclick="document.getElementById('import-file').click()">
+                            <i class="fas fa-file"></i> <span data-i18n="import_export.choose_file_btn">Choose File</span>
+                        </button>
+                        <span id="import-filename" data-i18n="common.no_file_selected">No file selected</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeImportExportModal()" data-i18n="common.cancel">Cancel</button>
+                <button class="btn btn-primary" id="import-export-action">Export</button>
+            </div>
+        </div>
     </div>
+
+    <!-- Password Audit Modal -->
+    <div id="audit-modal" class="modal" style="display: none;">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3><i class="fas fa-shield-alt"></i> <span data-i18n="audit.title">Security Audit</span></h3>
+                <button class="close-btn" onclick="closeAuditModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="audit-summary" id="audit-summary">
+                    <div class="audit-stats">
+                        <div class="stat-item">
+                            <div class="stat-number" id="total-passwords">0</div>
+                            <div class="stat-label" data-i18n="audit.total_passwords">Total Passwords</div>
+                        </div>
+                        <div class="stat-item stat-danger">
+                            <div class="stat-number" id="weak-passwords">0</div>
+                            <div class="stat-label" data-i18n="audit.weak_passwords">Weak Passwords</div>
+                        </div>
+                        <div class="stat-item stat-warning">
+                            <div class="stat-number" id="reused-passwords">0</div>
+                            <div class="stat-label" data-i18n="audit.reused_passwords">Reused Passwords</div>
+                        </div>
+                        <div class="stat-item stat-info">
+                            <div class="stat-number" id="old-passwords">0</div>
+                            <div class="stat-label" data-i18n="audit.old_passwords">Old Passwords</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="audit-details" id="audit-details">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeAuditModal()" data-i18n="audit.close">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Category Management Modal -->
+    <div id="category-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-folder"></i> <span data-i18n="categories.title">Manage Categories</span></h3>
+                <button class="close-btn" onclick="closeCategoryModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <button class="btn btn-primary" onclick="showAddCategoryForm()">
+                        <i class="fas fa-plus"></i> <span data-i18n="categories.add_category">Add Category</span>
+                    </button>
+                </div>
+                
+                <div id="add-category-form" class="form-group" style="display: none;">
+                    <div class="form-row">
+                        <input type="text" id="category-name" data-i18n-placeholder="categories.category_name" placeholder="Category name" class="form-control">
+                        <input type="color" id="category-color" value="#6366f1" class="form-control color-input">
+                        <select id="category-icon" class="form-control">
+                            <option value="folder" data-i18n="category_icons.folder">📁 Folder</option>
+                            <option value="briefcase" data-i18n="category_icons.work">💼 Work</option>
+                            <option value="user" data-i18n="category_icons.personal">👤 Personal</option>
+                            <option value="users" data-i18n="category_icons.social">👥 Social</option>
+                            <option value="shopping-cart" data-i18n="category_icons.shopping">🛒 Shopping</option>
+                            <option value="credit-card" data-i18n="category_icons.finance">💳 Finance</option>
+                            <option value="shield" data-i18n="category_icons.security">🛡️ Security</option>
+                            <option value="gamepad" data-i18n="category_icons.gaming">🎮 Gaming</option>
+                        </select>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn btn-primary" onclick="saveCategory()" data-i18n="categories.save_category">Save</button>
+                        <button class="btn btn-outline" onclick="cancelAddCategory()" data-i18n="categories.cancel">Cancel</button>
+                    </div>
+                </div>
+                
+                <div class="categories-list" id="categories-list">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeCategoryModal()" data-i18n="categories.close">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Advanced Search Modal -->
+    <div id="search-modal" class="modal" style="display: none;">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3><i class="fas fa-search"></i> <span data-i18n="search.title">Advanced Search</span></h3>
+                <button class="close-btn" onclick="closeSearchModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="search-filters">
+                    <div class="form-group">
+                        <label for="search-name" data-i18n="search.name">Name</label>
+                        <input type="text" id="search-name" class="form-control" data-i18n-placeholder="search.name" placeholder="Name">
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="search-username" data-i18n="search.username">Username</label>
+                            <input type="text" id="search-username" class="form-control" data-i18n-placeholder="search.username" placeholder="Username">
+                        </div>
+                        <div class="form-group">
+                            <label for="search-url" data-i18n="search.url">URL</label>
+                            <input type="text" id="search-url" class="form-control" data-i18n-placeholder="search.url" placeholder="URL">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="search-category" data-i18n="search.category">Category</label>
+                            <select id="search-category" class="form-control">
+                                <option value="" data-i18n="search.all_categories">All Categories</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="search-tags" data-i18n="search.tags">Tags</label>
+                            <input type="text" id="search-tags" class="form-control" data-i18n-placeholder="search.tags" placeholder="Tags (comma-separated)">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="search-weak-only">
+                            <span class="checkbox-custom"></span>
+                            <span data-i18n="search.weak_only">Show weak passwords only</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="search-old-only">
+                            <span class="checkbox-custom"></span>
+                            <span data-i18n="search.old_only">Show old passwords only</span>
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <button class="btn btn-primary" onclick="performAdvancedSearch()">
+                            <i class="fas fa-search"></i> <span data-i18n="search.search">Search</span>
+                        </button>
+                        <button class="btn btn-outline" onclick="clearSearchFilters()" data-i18n="search.clear">Clear</button>
+                    </div>
+                </div>
+                
+                <div class="search-results" id="search-results">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeSearchModal()" data-i18n="search.close">Close</button>
+            </div>
+        </div>
+    </div>
+
 
     <script src="i18n.js"></script>
     <script src="renderer.js"></script>

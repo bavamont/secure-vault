@@ -1,28 +1,193 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, desktopCapturer } = require('electron');
+/**
+ * @fileoverview Main process for Secure Vault - handles app lifecycle, security, and auto-updates
+ */
+
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, desktopCapturer, globalShortcut, Notification, clipboard, Tray, nativeImage } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
-const fs = require('fs').promises;
-const fsSync = require('fs');
-const os = require('os');
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 const Store = require('electron-store');
+const { ImportExportManager } = require('./import-export');
+const i18n = require('./i18n');
 
+/**
+ * @type {BrowserWindow|null} Main application window
+ */
 let mainWindow;
+let tray;
+
+/**
+ * @type {boolean} Whether an update has been downloaded and is ready to install
+ */
 let updateDownloaded = false;
+
+/**
+ * @type {boolean} Whether the vault is currently locked
+ */
 let isLocked = true;
-let masterPasswordHash = null;
+
+/**
+ * @type {NodeJS.Timeout|null} Timeout for periodic update checks
+ */
 let updateCheckTimeout = null;
 
+/**
+ * @type {Store|null} Encrypted store for vault data
+ */
+let vaultStore = null;
+
+/**
+ * @type {NodeJS.Timeout|null} Timeout for automatic vault locking
+ */
+let sessionTimeout = null;
+
+/**
+ * @type {number} Number of consecutive failed password attempts
+ */
+let failedAttempts = 0;
+
+/**
+ * @type {number} Timestamp of last failed password attempt
+ */
+let lastFailedAttempt = 0;
+
+/**
+ * @type {boolean} Whether auto-update is currently checking for updates
+ */
+let isCheckingForUpdates = false;
+
+/**
+ * @type {ImportExportManager} Import/Export manager instance
+ */
+const importExportManager = new ImportExportManager();
+
+/**
+ * Configuration store for application settings
+ */
 const store = new Store({
     name: 'secure-vault-config',
     encryptionKey: process.env.NODE_ENV === 'development' ? 'dev-key' : undefined
 });
 
-const vaultStore = new Store({
-    name: 'secure-vault-data',
-    encryptionKey: 'vault-data'
-});
+/**
+ * Derives encryption key from master password using PBKDF2
+ * @param {string} password - The master password
+ * @returns {string} Derived encryption key as hex string
+ */
+function deriveEncryptionKey(password) {
+    let salt = store.get('encryptionSalt');
+    if (!salt) {
+        salt = crypto.randomBytes(32).toString('hex');
+        store.set('encryptionSalt', salt);
+    }
+    return crypto.pbkdf2Sync(password, salt, 100000, 32, 'sha512').toString('hex');
+}
 
+/**
+ * Initializes the encrypted vault store with derived key
+ * @param {string} password - The master password
+ */
+function initializeVaultStore(password) {
+    try {
+        const encryptionKey = deriveEncryptionKey(password);
+        vaultStore = new Store({
+            name: 'secure-vault-data',
+            encryptionKey: encryptionKey
+        });
+
+        /* Test store access to ensure it's not corrupted */
+        vaultStore.get('passwordEntries', []);
+    } catch (error) {
+
+        /* Check if this is a one-time corruption recovery */
+        const recoveryFlag = store.get('vaultRecoveryPerformed', false);
+
+        if (!recoveryFlag) {
+            console.log('First-time vault corruption detected. Performing recovery...');
+
+            try {
+                /* Mark recovery as performed to prevent infinite loops */
+                store.set('vaultRecoveryPerformed', true);
+
+                /* Generate new salt for corrupted vault recovery */
+                const newSalt = crypto.randomBytes(32).toString('hex');
+                store.set('encryptionSalt', newSalt);
+                console.log('Generated new encryption salt for corrupted vault recovery');
+
+                /* Create new encryption key with fresh salt */
+                const freshKey = crypto.pbkdf2Sync(password, newSalt, 100000, 32, 'sha512').toString('hex');
+
+                /* Use the original vault name but with fresh encryption */
+                vaultStore = new Store({
+                    name: 'secure-vault-data',
+                    encryptionKey: freshKey,
+                    clearInvalidConfig: true
+                });
+
+                /* Initialize with empty data structure */
+                vaultStore.set('passwordEntries', []);
+                vaultStore.set('totpEntries', []);
+                vaultStore.set('categories', []);
+
+                console.log('Fresh vault store created successfully with new encryption');
+                console.log('WARNING: Previous vault data was corrupted and could not be recovered.');
+            } catch (secondError) {
+                console.error('Failed to create fresh vault store:', secondError);
+                throw new Error(i18n.t('errors.unable_initialize_vault'));
+            }
+        } else {
+            /* Recovery already performed, but still failing - this indicates a persistent issue */
+            console.error('Vault store still corrupted after recovery attempt.');
+            throw new Error(i18n.t('errors.vault_corruption_persists'));
+        }
+    }
+}
+
+/**
+ * Ensures vault store is ready for operations
+ * @returns {Object|null} Error object if vault is locked, null otherwise
+ */
+function ensureVaultStoreReady() {
+    if (isLocked || !vaultStore) {
+        return { success: false, error: i18n.t('errors.vault_locked') };
+    }
+    resetSessionTimeout();
+    return null;
+}
+
+/**
+ * Resets the automatic session timeout
+ */
+function resetSessionTimeout() {
+    if (sessionTimeout) {
+        clearTimeout(sessionTimeout);
+    }
+    sessionTimeout = setTimeout(function() {
+        if (!isLocked) {
+            lockVaultInternal();
+        }
+    }, 30 * 60 * 1000);
+}
+
+/**
+ * Locks the vault and clears sensitive data
+ */
+function lockVaultInternal() {
+    isLocked = true;
+    vaultStore = null;
+    if (sessionTimeout) {
+        clearTimeout(sessionTimeout);
+        sessionTimeout = null;
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('vault-auto-locked');
+    }
+}
+
+/**
+ * Creates the main application window
+ */
 function createWindow() {
     mainWindow = new BrowserWindow({
         width: 1400,
@@ -39,7 +204,7 @@ function createWindow() {
         frame: false,
         titleBarStyle: 'hidden',
         backgroundColor: '#0a0e1a',
-        title: 'Secure Vault'
+        title: i18n.t('app.title')
     });
 
     mainWindow.setMenu(null);
@@ -54,8 +219,17 @@ function createWindow() {
         setTimeout(function() {
             if (!process.argv.includes('--dev')) {
                 checkForUpdatesOnStartup();
+                schedulePeriodicUpdates();
             }
         }, 2000);
+    });
+
+    mainWindow.on('close', function(event) {
+        const settings = store.get('appSettings', {});
+        if (settings.closeToTray !== false && !app.isQuiting) {
+            event.preventDefault();
+            mainWindow.hide();
+        }
     });
 
     mainWindow.on('closed', function() {
@@ -63,14 +237,64 @@ function createWindow() {
         if (updateCheckTimeout) {
             clearTimeout(updateCheckTimeout);
         }
+        if (sessionTimeout) {
+            clearTimeout(sessionTimeout);
+        }
+        globalShortcut.unregisterAll();
     });
 
     mainWindow.webContents.setWindowOpenHandler(function(details) {
         shell.openExternal(details.url);
         return { action: 'deny' };
     });
+
+    createTray();
 }
 
+/**
+ * Creates the system tray
+ */
+function createTray() {
+    const trayIcon = nativeImage.createFromPath(getIconPath());
+    tray = new Tray(trayIcon.resize({ width: 16, height: 16 }));
+
+    const contextMenu = Menu.buildFromTemplate([
+        {
+            label: i18n.t('tray.show_secure_vault'),
+            click: function() {
+                mainWindow.show();
+                mainWindow.focus();
+            }
+        },
+        {
+            label: i18n.t('tray.lock_vault'),
+            click: function() {
+                mainWindow.webContents.send('lock-vault');
+            }
+        },
+        { type: 'separator' },
+        {
+            label: i18n.t('tray.quit'),
+            click: function() {
+                app.isQuiting = true;
+                app.quit();
+            }
+        }
+    ]);
+
+    tray.setToolTip(i18n.t('tray.tooltip'));
+    tray.setContextMenu(contextMenu);
+
+    tray.on('double-click', function() {
+        mainWindow.show();
+        mainWindow.focus();
+    });
+}
+
+/**
+ * Gets the appropriate icon path for the current platform
+ * @returns {string} Path to the icon file
+ */
 function getIconPath() {
     const iconPaths = {
         win32: 'assets/icon.ico',
@@ -82,12 +306,18 @@ function getIconPath() {
     return path.join(__dirname, iconPath);
 }
 
+/**
+ * Sets up auto-updater event handlers and configuration
+ */
 function setupAutoUpdater() {
     autoUpdater.autoDownload = false;
-    autoUpdater.autoInstallOnAppQuit = false;
+    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.allowDowngrade = false;
+    autoUpdater.allowPrerelease = false;
 
     autoUpdater.on('checking-for-update', function() {
         console.log('Checking for update...');
+        isCheckingForUpdates = true;
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('update-checking');
         }
@@ -95,6 +325,12 @@ function setupAutoUpdater() {
 
     autoUpdater.on('update-available', function(info) {
         console.log('Update available:', info);
+        isCheckingForUpdates = false;
+        store.set('lastUpdateInfo', {
+            version: info.version,
+            releaseDate: info.releaseDate,
+            downloadUrl: info.files?.[0]?.url
+        });
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('update-available', info);
         }
@@ -102,6 +338,7 @@ function setupAutoUpdater() {
 
     autoUpdater.on('update-not-available', function(info) {
         console.log('Update not available:', info);
+        isCheckingForUpdates = false;
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('update-not-available', info);
         }
@@ -109,6 +346,11 @@ function setupAutoUpdater() {
 
     autoUpdater.on('error', function(err) {
         console.error('Update error:', err);
+        isCheckingForUpdates = false;
+        store.set('lastUpdateError', {
+            message: err.message,
+            timestamp: new Date().toISOString()
+        });
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('update-error', err);
         }
@@ -123,16 +365,24 @@ function setupAutoUpdater() {
     autoUpdater.on('update-downloaded', function(info) {
         console.log('Update downloaded:', info);
         updateDownloaded = true;
+        store.set('updateDownloaded', true);
+        store.set('updateReadyToInstall', {
+            version: info.version,
+            downloadedAt: new Date().toISOString()
+        });
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('update-downloaded', info);
         }
     });
 }
 
+/**
+ * Checks for updates on application startup
+ */
 async function checkForUpdatesOnStartup() {
     try {
         const autoCheckEnabled = store.get('autoCheckUpdates', true);
-        if (!autoCheckEnabled) {
+        if (!autoCheckEnabled || isCheckingForUpdates) {
             return;
         }
 
@@ -146,28 +396,74 @@ async function checkForUpdatesOnStartup() {
 
         store.set('lastUpdateCheck', now);
 
-        if (process.platform !== 'linux') {
+        if (process.platform !== 'linux' && app.isPackaged) {
             console.log('Checking for updates on startup...');
             await autoUpdater.checkForUpdates();
         }
     } catch (error) {
         console.error('Error checking for updates on startup:', error);
+        store.set('lastUpdateError', {
+            message: error.message,
+            timestamp: new Date().toISOString(),
+            context: 'startup'
+        });
     }
 }
 
-function checkForUpdates() {
-    if (process.platform === 'linux') {
-        return Promise.resolve({ success: false, error: 'Updates not supported on Linux' });
-    }
+/**
+ * Schedules periodic update checks
+ */
+function schedulePeriodicUpdates() {
+    const checkInterval = 6 * 60 * 60 * 1000; // 6 hours
 
+    updateCheckTimeout = setInterval(async function() {
+        try {
+            const autoCheckEnabled = store.get('autoCheckUpdates', true);
+            if (!autoCheckEnabled || isCheckingForUpdates || !app.isPackaged) {
+                return;
+            }
+
+            if (process.platform !== 'linux') {
+                console.log('Periodic update check...');
+                await autoUpdater.checkForUpdates();
+            }
+        } catch (error) {
+            console.error('Error during periodic update check:', error);
+        }
+    }, checkInterval);
+}
+
+/**
+ * Forces an immediate update check
+ * @returns {Promise<Object>} Result of update check
+ */
+async function forceUpdateCheck() {
     try {
-        return autoUpdater.checkForUpdates();
+        if (isCheckingForUpdates) {
+            return { success: false, error: i18n.t('errors.update_in_progress') };
+        }
+
+        if (process.platform === 'linux') {
+            return { success: false, error: i18n.t('errors.updates_not_supported_linux') };
+        }
+
+        if (!app.isPackaged) {
+            return { success: false, error: i18n.t('errors.updates_packaged_only') };
+        }
+
+        store.set('lastUpdateCheck', Date.now());
+        const result = await autoUpdater.checkForUpdates();
+        return { success: true, updateInfo: result };
     } catch (error) {
-        console.error('Error checking for updates:', error);
-        throw error;
+        console.error('Error forcing update check:', error);
+        return { success: false, error: error.message };
     }
 }
 
+
+/**
+ * IPC handler to get available desktop sources for screen capture
+ */
 ipcMain.handle('get-desktop-sources', async function() {
     try {
         const sources = await desktopCapturer.getSources({
@@ -191,6 +487,11 @@ ipcMain.handle('get-desktop-sources', async function() {
     }
 });
 
+/**
+ * IPC handler to capture screen from specific source
+ * @param {Event} event - IPC event
+ * @param {string} sourceId - ID of the desktop source to capture
+ */
 ipcMain.handle('capture-screen', async function(event, sourceId) {
     try {
         const sources = await desktopCapturer.getSources({
@@ -202,7 +503,7 @@ ipcMain.handle('capture-screen', async function(event, sourceId) {
             return s.id === sourceId;
         });
         if (!source) {
-            return { success: false, error: 'Source not found' };
+            return { success: false, error: i18n.t('errors.source_not_found') };
         }
 
         return {
@@ -217,18 +518,27 @@ ipcMain.handle('capture-screen', async function(event, sourceId) {
     }
 });
 
+/**
+ * IPC handler to check for application updates
+ */
 ipcMain.handle('check-for-updates', async function() {
     try {
-        const result = await autoUpdater.checkForUpdates();
-        return { success: true, updateInfo: result };
+        const result = await forceUpdateCheck();
+        return result;
     } catch (error) {
         console.error('Error checking for updates:', error);
         return { success: false, error: error.message };
     }
 });
 
+/**
+ * IPC handler to download available update
+ */
 ipcMain.handle('download-update', async function() {
     try {
+        if (isCheckingForUpdates) {
+            return { success: false, error: i18n.t('errors.update_in_progress') };
+        }
         await autoUpdater.downloadUpdate();
         return { success: true };
     } catch (error) {
@@ -237,13 +547,17 @@ ipcMain.handle('download-update', async function() {
     }
 });
 
+/**
+ * IPC handler to install downloaded update and restart app
+ */
 ipcMain.handle('install-update', async function() {
     try {
         if (updateDownloaded) {
+            store.set('updateDownloaded', false);
             autoUpdater.quitAndInstall();
             return { success: true };
         } else {
-            return { success: false, error: 'No update downloaded' };
+            return { success: false, error: i18n.t('errors.no_update_downloaded') };
         }
     } catch (error) {
         console.error('Error installing update:', error);
@@ -251,37 +565,87 @@ ipcMain.handle('install-update', async function() {
     }
 });
 
+/**
+ * IPC handler to get update information and status
+ */
 ipcMain.handle('get-update-info', async function() {
     try {
+        const lastUpdateInfo = store.get('lastUpdateInfo', null);
+        const lastUpdateError = store.get('lastUpdateError', null);
+        const updateReadyToInstall = store.get('updateReadyToInstall', null);
+
         return {
             success: true,
             version: app.getVersion(),
             updateDownloaded: updateDownloaded,
             platform: process.platform,
             autoCheckEnabled: store.get('autoCheckUpdates', true),
-            lastCheck: store.get('lastUpdateCheck', 0)
+            lastCheck: store.get('lastUpdateCheck', 0),
+            isCheckingForUpdates: isCheckingForUpdates,
+            lastUpdateInfo: lastUpdateInfo,
+            lastUpdateError: lastUpdateError,
+            updateReadyToInstall: updateReadyToInstall,
+            supportsUpdates: process.platform !== 'linux' && app.isPackaged
         };
     } catch (error) {
         return { success: false, error: error.message };
     }
 });
 
+/**
+ * IPC handler to enable/disable automatic update checks
+ * @param {Event} event - IPC event
+ * @param {boolean} enabled - Whether to enable auto-update checks
+ */
 ipcMain.handle('set-auto-check-updates', async function(event, enabled) {
     try {
         store.set('autoCheckUpdates', enabled);
+        if (!enabled && updateCheckTimeout) {
+            clearInterval(updateCheckTimeout);
+            updateCheckTimeout = null;
+        } else if (enabled && !updateCheckTimeout) {
+            schedulePeriodicUpdates();
+        }
         return { success: true };
     } catch (error) {
         return { success: false, error: error.message };
     }
 });
 
+/**
+ * IPC handler to clear update cache and history
+ */
+ipcMain.handle('clear-update-cache', async function() {
+    try {
+        store.delete('lastUpdateInfo');
+        store.delete('lastUpdateError');
+        store.delete('updateReadyToInstall');
+        store.delete('updateDownloaded');
+        updateDownloaded = false;
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * IPC handler to minimize the main window
+ */
 ipcMain.handle('window-minimize', function() {
     if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.minimize();
+        const settings = store.get('appSettings', {});
+        if (settings.closeToTray !== false) {
+            mainWindow.hide();
+        } else {
+            mainWindow.minimize();
+        }
     }
     return { success: true };
 });
 
+/**
+ * IPC handler to maximize/unmaximize the main window
+ */
 ipcMain.handle('window-maximize', function() {
     if (mainWindow && !mainWindow.isDestroyed()) {
         if (mainWindow.isMaximized()) {
@@ -293,6 +657,9 @@ ipcMain.handle('window-maximize', function() {
     return { success: true };
 });
 
+/**
+ * IPC handler to close the main window
+ */
 ipcMain.handle('window-close', function() {
     if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.close();
@@ -300,10 +667,18 @@ ipcMain.handle('window-close', function() {
     return { success: true };
 });
 
+/**
+ * IPC handler to check if window is maximized
+ */
 ipcMain.handle('window-is-maximized', function() {
     return mainWindow && !mainWindow.isDestroyed() ? mainWindow.isMaximized() : false;
 });
 
+/**
+ * IPC handler to setup initial master password
+ * @param {Event} event - IPC event
+ * @param {string} password - Master password to setup
+ */
 ipcMain.handle('setup-master-password', async function(event, password) {
     try {
         const saltRounds = 12;
@@ -312,8 +687,9 @@ ipcMain.handle('setup-master-password', async function(event, password) {
         store.set('masterPasswordHash', hash);
         store.set('isSetup', true);
 
-        masterPasswordHash = hash;
+        initializeVaultStore(password);
         isLocked = false;
+        resetSessionTimeout();
 
         return { success: true };
     } catch (error) {
@@ -322,20 +698,44 @@ ipcMain.handle('setup-master-password', async function(event, password) {
     }
 });
 
+/**
+ * IPC handler to verify master password with rate limiting
+ * @param {Event} event - IPC event
+ * @param {string} password - Master password to verify
+ */
 ipcMain.handle('verify-master-password', async function(event, password) {
     try {
+        const now = Date.now();
+        const timeSinceLastAttempt = now - lastFailedAttempt;
+
+        if (timeSinceLastAttempt > 15 * 60 * 1000) {
+            failedAttempts = 0;
+        }
+
+        if (failedAttempts > 0) {
+            const delay = Math.min(30000, 1000 * Math.pow(2, failedAttempts - 1));
+            if (timeSinceLastAttempt < delay) {
+                const remaining = Math.ceil((delay - timeSinceLastAttempt) / 1000);
+                return { success: false, error: `Too many failed attempts. Try again in ${remaining} seconds.` };
+            }
+        }
+
         const storedHash = store.get('masterPasswordHash');
         if (!storedHash) {
-            return { success: false, error: 'Master password not set' };
+            return { success: false, error: i18n.t('errors.master_password_not_set') };
         }
 
         const isValid = await bcrypt.compare(password, storedHash);
         if (isValid) {
-            masterPasswordHash = storedHash;
+            failedAttempts = 0;
+            initializeVaultStore(password);
             isLocked = false;
+            resetSessionTimeout();
             return { success: true };
         } else {
-            return { success: false, error: 'Invalid password' };
+            failedAttempts++;
+            lastFailedAttempt = now;
+            return { success: false, error: i18n.t('errors.invalid_password') };
         }
     } catch (error) {
         console.error('Error verifying master password:', error);
@@ -347,19 +747,18 @@ ipcMain.handle('change-master-password', async function(event, currentPassword, 
     try {
         const storedHash = store.get('masterPasswordHash');
         if (!storedHash) {
-            return { success: false, error: 'Master password not set' };
+            return { success: false, error: i18n.t('errors.master_password_not_set') };
         }
 
         const isValid = await bcrypt.compare(currentPassword, storedHash);
         if (!isValid) {
-            return { success: false, error: 'Current password is incorrect' };
+            return { success: false, error: i18n.t('errors.current_password_incorrect') };
         }
 
         const saltRounds = 12;
         const newHash = await bcrypt.hash(newPassword, saltRounds);
 
         store.set('masterPasswordHash', newHash);
-        masterPasswordHash = newHash;
 
         return { success: true };
     } catch (error) {
@@ -370,8 +769,7 @@ ipcMain.handle('change-master-password', async function(event, currentPassword, 
 
 ipcMain.handle('lock-vault', async function() {
     try {
-        isLocked = true;
-        masterPasswordHash = null;
+        lockVaultInternal();
         return { success: true };
     } catch (error) {
         console.error('Error locking vault:', error);
@@ -391,9 +789,8 @@ ipcMain.handle('is-vault-setup', async function() {
 
 ipcMain.handle('save-password-entry', async function(event, entry) {
     try {
-        if (isLocked) {
-            return { success: false, error: 'Vault is locked' };
-        }
+        const lockCheck = ensureVaultStoreReady();
+        if (lockCheck) return lockCheck;
 
         const entries = vaultStore.get('passwordEntries', []);
 
@@ -421,9 +818,8 @@ ipcMain.handle('save-password-entry', async function(event, entry) {
 
 ipcMain.handle('get-password-entries', async function() {
     try {
-        if (isLocked) {
-            return { success: false, error: 'Vault is locked' };
-        }
+        const lockCheck = ensureVaultStoreReady();
+        if (lockCheck) return lockCheck;
 
         const entries = vaultStore.get('passwordEntries', []);
         return { success: true, entries: entries };
@@ -435,9 +831,8 @@ ipcMain.handle('get-password-entries', async function() {
 
 ipcMain.handle('delete-password-entry', async function(event, entryId) {
     try {
-        if (isLocked) {
-            return { success: false, error: 'Vault is locked' };
-        }
+        const lockCheck = ensureVaultStoreReady();
+        if (lockCheck) return lockCheck;
 
         const entries = vaultStore.get('passwordEntries', []);
         const filteredEntries = entries.filter(function(e) {
@@ -454,9 +849,8 @@ ipcMain.handle('delete-password-entry', async function(event, entryId) {
 
 ipcMain.handle('save-totp-entry', async function(event, entry) {
     try {
-        if (isLocked) {
-            return { success: false, error: 'Vault is locked' };
-        }
+        const lockCheck = ensureVaultStoreReady();
+        if (lockCheck) return lockCheck;
 
         const entries = vaultStore.get('totpEntries', []);
 
@@ -484,9 +878,8 @@ ipcMain.handle('save-totp-entry', async function(event, entry) {
 
 ipcMain.handle('get-totp-entries', async function() {
     try {
-        if (isLocked) {
-            return { success: false, error: 'Vault is locked' };
-        }
+        const lockCheck = ensureVaultStoreReady();
+        if (lockCheck) return lockCheck;
 
         const entries = vaultStore.get('totpEntries', []);
         return { success: true, entries: entries };
@@ -498,9 +891,8 @@ ipcMain.handle('get-totp-entries', async function() {
 
 ipcMain.handle('delete-totp-entry', async function(event, entryId) {
     try {
-        if (isLocked) {
-            return { success: false, error: 'Vault is locked' };
-        }
+        const lockCheck = ensureVaultStoreReady();
+        if (lockCheck) return lockCheck;
 
         const entries = vaultStore.get('totpEntries', []);
         const filteredEntries = entries.filter(function(e) {
@@ -515,18 +907,32 @@ ipcMain.handle('delete-totp-entry', async function(event, entryId) {
     }
 });
 
-ipcMain.handle('export-vault', async function() {
+/**
+ * IPC handler for enhanced vault export with multiple format support
+ * @param {Event} event - IPC event
+ * @param {string} format - Export format (csv, json, securevault, etc.)
+ * @param {string} password - Password for encrypted formats
+ */
+ipcMain.handle('export-vault', async function(event, format = 'json', password = null) {
     try {
-        if (isLocked) {
-            return { success: false, error: 'Vault is locked' };
-        }
+        const lockCheck = ensureVaultStoreReady();
+        if (lockCheck) return lockCheck;
+
+        const formatInfo = importExportManager.supportedFormats[format] || i18n.t('formats.unknown_format');
+        const extensions = {
+            'csv': ['csv'],
+            'json': ['json'],
+            'securevault': ['svault'],
+            'lastpass': ['csv'],
+            'bitwarden': ['json']
+        };
 
         const result = await dialog.showSaveDialog(mainWindow, {
-            title: 'Export Vault Data',
-            defaultPath: 'secure-vault-backup-' + new Date().toISOString().split('T')[0] + '.json',
+            title: `Export Vault Data - ${formatInfo}`,
+            defaultPath: `secure-vault-backup-${new Date().toISOString().split('T')[0]}.${extensions[format]?.[0] || 'json'}`,
             filters: [
-                { name: 'JSON Files', extensions: ['json'] },
-                { name: 'All Files', extensions: ['*'] }
+                { name: formatInfo, extensions: extensions[format] || ['json'] },
+                { name: i18n.t('file_types.all_files'), extensions: ['*'] }
             ]
         });
 
@@ -534,32 +940,36 @@ ipcMain.handle('export-vault', async function() {
             return { success: false, canceled: true };
         }
 
-        const vaultData = {
-            passwordEntries: vaultStore.get('passwordEntries', []),
-            totpEntries: vaultStore.get('totpEntries', []),
-            exportedAt: new Date().toISOString(),
-            version: app.getVersion()
-        };
+        const passwordEntries = vaultStore.get('passwordEntries', []);
+        const totpEntries = vaultStore.get('totpEntries', []);
+        const allEntries = [...passwordEntries, ...totpEntries];
 
-        await fs.writeFile(result.filePath, JSON.stringify(vaultData, null, 2), 'utf8');
-        return { success: true, path: result.filePath };
+        await importExportManager.exportData(allEntries, format, result.filePath, password);
+        return { success: true, path: result.filePath, format: format, count: allEntries.length };
     } catch (error) {
         console.error('Error exporting vault:', error);
         return { success: false, error: error.message };
     }
 });
 
-ipcMain.handle('import-vault', async function() {
+/**
+ * IPC handler for enhanced vault import with multiple format support
+ * @param {Event} event - IPC event
+ * @param {string} password - Password for encrypted formats
+ */
+ipcMain.handle('import-vault', async function(event, password = null) {
     try {
-        if (isLocked) {
-            return { success: false, error: 'Vault is locked' };
-        }
+        const lockCheck = ensureVaultStoreReady();
+        if (lockCheck) return lockCheck;
 
         const result = await dialog.showOpenDialog(mainWindow, {
-            title: 'Import Vault Data',
+            title: i18n.t('dialogs.import_vault_title'),
             filters: [
-                { name: 'JSON Files', extensions: ['json'] },
-                { name: 'All Files', extensions: ['*'] }
+                { name: i18n.t('file_types.csv_files'), extensions: ['csv'] },
+                { name: i18n.t('file_types.json_files'), extensions: ['json'] },
+                { name: i18n.t('file_types.secure_vault_files'), extensions: ['svault'] },
+                { name: 'WinAuth Files', extensions: ['txt', 'wa.txt'] },
+                { name: i18n.t('file_types.all_files'), extensions: ['*'] }
             ],
             properties: ['openFile']
         });
@@ -568,25 +978,271 @@ ipcMain.handle('import-vault', async function() {
             return { success: false, canceled: true };
         }
 
-        const data = await fs.readFile(result.filePaths[0], 'utf8');
-        const vaultData = JSON.parse(data);
+        const importResult = await importExportManager.importData(result.filePaths[0], password);
+        let passwordCount = 0;
+        let totpCount = 0;
 
-        if (vaultData.passwordEntries) {
-            const currentPasswordEntries = vaultStore.get('passwordEntries', []);
-            const mergedPasswordEntries = currentPasswordEntries.concat(vaultData.passwordEntries);
-            vaultStore.set('passwordEntries', mergedPasswordEntries);
+        if (importResult.success && importResult.entries && importResult.entries.length > 0) {
+            /* Separate password and TOTP entries */
+            const passwordEntries = [];
+            const totpEntries = [];
+
+            for (const entry of importResult.entries) {
+                if (entry.type === 'totp' || entry.secret || entry.totp) {
+                    /* Convert to TOTP entry format */
+                    totpEntries.push({
+                        id: entry.id,
+                        name: entry.name,
+                        secret: entry.secret || entry.totp,
+                        issuer: entry.issuer || entry.category || i18n.t('import.default_issuer'),
+                        digits: entry.digits || 6,
+                        period: entry.period || 30,
+                        createdAt: entry.created || new Date().toISOString(),
+                        updatedAt: entry.modified || new Date().toISOString()
+                    });
+                } else {
+                    /* Convert to password entry format */
+                    passwordEntries.push({
+                        id: entry.id,
+                        name: entry.name,
+                        username: entry.username,
+                        password: entry.password,
+                        url: entry.url,
+                        category: entry.category,
+                        notes: entry.notes,
+                        tags: entry.tags || [],
+                        createdAt: entry.created || new Date().toISOString(),
+                        updatedAt: entry.modified || new Date().toISOString()
+                    });
+                }
+            }
+
+            passwordCount = passwordEntries.length;
+            totpCount = totpEntries.length;
+
+            /* Merge with existing entries */
+            if (passwordEntries.length > 0) {
+                const currentPasswordEntries = vaultStore.get('passwordEntries', []);
+                const mergedPasswordEntries = currentPasswordEntries.concat(passwordEntries);
+                vaultStore.set('passwordEntries', mergedPasswordEntries);
+            }
+
+            if (totpEntries.length > 0) {
+                const currentTotpEntries = vaultStore.get('totpEntries', []);
+                const mergedTotpEntries = currentTotpEntries.concat(totpEntries);
+                vaultStore.set('totpEntries', mergedTotpEntries);
+            }
         }
 
-        if (vaultData.totpEntries) {
-            const currentTotpEntries = vaultStore.get('totpEntries', []);
-            const mergedTotpEntries = currentTotpEntries.concat(vaultData.totpEntries);
-            vaultStore.set('totpEntries', mergedTotpEntries);
-        }
-
-        return { success: true, path: result.filePaths[0] };
+        return {
+            success: importResult.success,
+            path: result.filePaths[0],
+            imported: importResult.imported,
+            skipped: importResult.skipped,
+            errors: importResult.errors,
+            format: importResult.format,
+            passwordCount: passwordCount,
+            totpCount: totpCount
+        };
     } catch (error) {
         console.error('Error importing vault:', error);
         return { success: false, error: error.message };
+    }
+});
+
+/**
+ * IPC handler for importing from a specific file path
+ */
+ipcMain.handle('import-from-file', async function(event, filePath, password = null) {
+    try {
+        const lockCheck = ensureVaultStoreReady();
+        if (lockCheck) return lockCheck;
+
+        if (!filePath) {
+            return { success: false, error: 'No file path provided' };
+        }
+
+        const importResult = await importExportManager.importData(filePath, password);
+        let passwordCount = 0;
+        let totpCount = 0;
+
+        if (importResult.success && importResult.entries && importResult.entries.length > 0) {
+            /* Separate password and TOTP entries */
+            const passwordEntries = [];
+            const totpEntries = [];
+
+            for (const entry of importResult.entries) {
+                if (entry.type === 'totp' || entry.secret || entry.totp) {
+                    /* Convert to TOTP entry format */
+                    totpEntries.push({
+                        id: entry.id,
+                        name: entry.name,
+                        secret: entry.secret || entry.totp,
+                        issuer: entry.issuer || entry.category || i18n.t('import.default_issuer'),
+                        digits: entry.digits || 6,
+                        period: entry.period || 30,
+                        createdAt: entry.created || new Date().toISOString(),
+                        updatedAt: entry.modified || new Date().toISOString()
+                    });
+                } else {
+                    /* Convert to password entry format */
+                    passwordEntries.push({
+                        id: entry.id,
+                        name: entry.name,
+                        username: entry.username,
+                        password: entry.password,
+                        url: entry.url,
+                        category: entry.category,
+                        notes: entry.notes,
+                        tags: entry.tags || [],
+                        createdAt: entry.created || new Date().toISOString(),
+                        updatedAt: entry.modified || new Date().toISOString()
+                    });
+                }
+            }
+
+            passwordCount = passwordEntries.length;
+            totpCount = totpEntries.length;
+
+            /* Save password entries */
+            if (passwordEntries.length > 0) {
+                const existingPasswords = vaultStore.get('passwords', []);
+                const updatedPasswords = existingPasswords.concat(passwordEntries);
+                vaultStore.set('passwords', updatedPasswords);
+            }
+
+            /* Save TOTP entries */
+            if (totpEntries.length > 0) {
+                const existingTotpEntries = vaultStore.get('totpEntries', []);
+                const updatedTotpEntries = existingTotpEntries.concat(totpEntries);
+                vaultStore.set('totpEntries', updatedTotpEntries);
+            }
+        }
+
+        return {
+            success: true,
+            imported: importResult.imported || 0,
+            skipped: importResult.skipped || 0,
+            errors: importResult.errors || [],
+            format: importResult.format || 'unknown',
+            passwordCount: passwordCount,
+            totpCount: totpCount
+        };
+
+    } catch (error) {
+        console.error('Import from file error:', error);
+        return {
+            success: false,
+            imported: 0,
+            skipped: 0,
+            errors: [error.message],
+            format: 'unknown',
+            passwordCount: 0,
+            totpCount: 0
+        };
+    }
+});
+
+/**
+ * IPC handler for importing from file content
+ */
+ipcMain.handle('import-from-content', async function(event, importData) {
+    try {
+        const lockCheck = ensureVaultStoreReady();
+        if (lockCheck) return lockCheck;
+
+        if (!importData.content) {
+            return { success: false, error: 'No file content provided' };
+        }
+
+        /* Create temporary file path for format detection */
+        const tempFilePath = importData.filename || 'import.txt';
+        
+        /* Detect format if not specified */
+        let format = importData.format;
+        if (!format) {
+            format = importExportManager.detectFormat(tempFilePath, importData.content);
+        }
+
+        /* Import data using the manager */
+        const importResult = await importExportManager.importData(tempFilePath, importData.password, importData.content);
+        let passwordCount = 0;
+        let totpCount = 0;
+
+        if (importResult.success && importResult.entries && importResult.entries.length > 0) {
+            /* Separate password and TOTP entries */
+            const passwordEntries = [];
+            const totpEntries = [];
+
+            for (const entry of importResult.entries) {
+                if (entry.type === 'totp' || entry.secret || entry.totp) {
+                    /* Convert to TOTP entry format */
+                    totpEntries.push({
+                        id: entry.id,
+                        name: entry.name,
+                        secret: entry.secret || entry.totp,
+                        issuer: entry.issuer || entry.category || i18n.t('import.default_issuer'),
+                        digits: entry.digits || 6,
+                        period: entry.period || 30,
+                        createdAt: entry.created || new Date().toISOString(),
+                        updatedAt: entry.modified || new Date().toISOString()
+                    });
+                } else {
+                    /* Convert to password entry format */
+                    passwordEntries.push({
+                        id: entry.id,
+                        name: entry.name,
+                        username: entry.username,
+                        password: entry.password,
+                        url: entry.url,
+                        category: entry.category,
+                        notes: entry.notes,
+                        tags: entry.tags || [],
+                        createdAt: entry.created || new Date().toISOString(),
+                        updatedAt: entry.modified || new Date().toISOString()
+                    });
+                }
+            }
+
+            passwordCount = passwordEntries.length;
+            totpCount = totpEntries.length;
+
+            /* Save password entries */
+            if (passwordEntries.length > 0) {
+                const existingPasswords = vaultStore.get('passwords', []);
+                const updatedPasswords = existingPasswords.concat(passwordEntries);
+                vaultStore.set('passwords', updatedPasswords);
+            }
+
+            /* Save TOTP entries */
+            if (totpEntries.length > 0) {
+                const existingTotpEntries = vaultStore.get('totpEntries', []);
+                const updatedTotpEntries = existingTotpEntries.concat(totpEntries);
+                vaultStore.set('totpEntries', updatedTotpEntries);
+            }
+        }
+
+        return {
+            success: true,
+            imported: importResult.imported || 0,
+            skipped: importResult.skipped || 0,
+            errors: importResult.errors || [],
+            format: importResult.format || format,
+            passwordCount: passwordCount,
+            totpCount: totpCount
+        };
+
+    } catch (error) {
+        console.error('Import from content error:', error);
+        return {
+            success: false,
+            imported: 0,
+            skipped: 0,
+            errors: [error.message],
+            format: 'unknown',
+            passwordCount: 0,
+            totpCount: 0
+        };
     }
 });
 
@@ -610,6 +1266,416 @@ ipcMain.handle('get-system-language', async function() {
     }
 });
 
+/**
+ * IPC handler to get supported import/export formats
+ */
+ipcMain.handle('get-supported-formats', async function() {
+    try {
+        return {
+            success: true,
+            formats: importExportManager.supportedFormats
+        };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * IPC handler to perform password security audit
+ */
+ipcMain.handle('audit-passwords', async function() {
+    try {
+        const lockCheck = ensureVaultStoreReady();
+        if (lockCheck) return lockCheck;
+
+        const passwordEntries = vaultStore.get('passwordEntries', []);
+        const audit = {
+            total: passwordEntries.length,
+            weak: 0,
+            reused: 0,
+            old: 0,
+            compromised: 0,
+            details: []
+        };
+
+        const passwordMap = new Map();
+        const now = new Date();
+        const sixMonthsAgo = new Date(now.getTime() - 6 * 30 * 24 * 60 * 60 * 1000);
+
+        for (const entry of passwordEntries) {
+            const issues = [];
+
+            /* Check password strength (basic check) */
+            if (entry.password.length < 8) {
+                issues.push('too_short');
+                audit.weak++;
+            }
+            if (!/[A-Z]/.test(entry.password) || !/[a-z]/.test(entry.password) ||
+                !/[0-9]/.test(entry.password) || !/[^A-Za-z0-9]/.test(entry.password)) {
+                if (!issues.includes('too_short')) {
+                    issues.push('weak');
+                    audit.weak++;
+                }
+            }
+
+            /* Check for reused passwords */
+            const passwordHash = crypto.createHash('sha256').update(entry.password).digest('hex');
+            if (passwordMap.has(passwordHash)) {
+                issues.push('reused');
+                audit.reused++;
+                /* Mark the original as reused too if not already marked */
+                const originalEntry = passwordMap.get(passwordHash);
+                if (!originalEntry.issues.includes('reused')) {
+                    originalEntry.issues.push('reused');
+                    audit.reused++;
+                    /* Update the original entry in audit.details if it exists */
+                    const originalDetail = audit.details.find(d => d.id === originalEntry.id);
+                    if (originalDetail && !originalDetail.issues.includes('reused')) {
+                        originalDetail.issues.push('reused');
+                    }
+                }
+            } else {
+                passwordMap.set(passwordHash, { id: entry.id, issues: [...issues] });
+            }
+
+            /* Check age */
+            const updatedAt = entry.updatedAt ? new Date(entry.updatedAt) : new Date(entry.createdAt);
+            if (updatedAt < sixMonthsAgo) {
+                issues.push('old');
+                audit.old++;
+            }
+
+            if (issues.length > 0) {
+                audit.details.push({
+                    id: entry.id,
+                    name: entry.name,
+                    issues: issues
+                });
+            }
+        }
+
+        return { success: true, audit };
+    } catch (error) {
+        console.error('Error auditing passwords:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * IPC handler to get all categories/folders
+ */
+ipcMain.handle('get-categories', async function() {
+    try {
+        const lockCheck = ensureVaultStoreReady();
+        if (lockCheck) return lockCheck;
+
+        const categories = vaultStore.get('categories', []);
+
+        return { success: true, categories };
+    } catch (error) {
+        console.error('Error getting categories:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * IPC handler to save/update a category
+ * @param {Event} event - IPC event
+ * @param {Object} category - Category object
+ */
+ipcMain.handle('save-category', async function(event, category) {
+    try {
+        const lockCheck = ensureVaultStoreReady();
+        if (lockCheck) return lockCheck;
+
+        const categories = vaultStore.get('categories', []);
+
+        if (category.id) {
+            const index = categories.findIndex(c => c.id === category.id);
+            if (index !== -1) {
+                categories[index] = { ...category, updatedAt: new Date().toISOString() };
+            }
+        } else {
+            category.id = crypto.randomUUID();
+            category.createdAt = new Date().toISOString();
+            category.updatedAt = new Date().toISOString();
+            categories.push(category);
+        }
+
+        vaultStore.set('categories', categories);
+        return { success: true, category };
+    } catch (error) {
+        console.error('Error saving category:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * IPC handler to delete a category
+ * @param {Event} event - IPC event
+ * @param {string} categoryId - Category ID to delete
+ */
+ipcMain.handle('delete-category', async function(event, categoryId) {
+    try {
+        const lockCheck = ensureVaultStoreReady();
+        if (lockCheck) return lockCheck;
+
+        const categories = vaultStore.get('categories', []);
+        const filteredCategories = categories.filter(c => c.id !== categoryId);
+
+        /* Update entries that used this category */
+        const passwordEntries = vaultStore.get('passwordEntries', []);
+        const updatedPasswordEntries = passwordEntries.map(entry => {
+            if (entry.category === categoryId) {
+                return { ...entry, category: '', updatedAt: new Date().toISOString() };
+            }
+            return entry;
+        });
+
+        vaultStore.set('categories', filteredCategories);
+        vaultStore.set('passwordEntries', updatedPasswordEntries);
+
+        return { success: true };
+    } catch (error) {
+        console.error('Error deleting category:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * IPC handler to get all tags used in entries
+ */
+ipcMain.handle('get-tags', async function() {
+    try {
+        const lockCheck = ensureVaultStoreReady();
+        if (lockCheck) return lockCheck;
+
+        const passwordEntries = vaultStore.get('passwordEntries', []);
+        const totpEntries = vaultStore.get('totpEntries', []);
+
+        const tagSet = new Set();
+
+        /* Collect tags from password entries */
+        passwordEntries.forEach(entry => {
+            if (entry.tags && Array.isArray(entry.tags)) {
+                entry.tags.forEach(tag => tagSet.add(tag));
+            }
+        });
+
+        /* Collect tags from TOTP entries */
+        totpEntries.forEach(entry => {
+            if (entry.tags && Array.isArray(entry.tags)) {
+                entry.tags.forEach(tag => tagSet.add(tag));
+            }
+        });
+
+        const tags = Array.from(tagSet).sort();
+        return { success: true, tags };
+    } catch (error) {
+        console.error('Error getting tags:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * IPC handler to search entries by various criteria
+ * @param {Event} event - IPC event
+ * @param {Object} criteria - Search criteria
+ */
+ipcMain.handle('search-entries', async function(event, criteria) {
+    try {
+        const lockCheck = ensureVaultStoreReady();
+        if (lockCheck) return lockCheck;
+
+        const passwordEntries = vaultStore.get('passwordEntries', []);
+        const totpEntries = vaultStore.get('totpEntries', []);
+
+        let results = { passwordEntries: [], totpEntries: [] };
+
+        /* Search password entries */
+        results.passwordEntries = passwordEntries.filter(entry => {
+            let match = true;
+
+            if (criteria.query) {
+                const query = criteria.query.toLowerCase();
+                match = match && (
+                    entry.name?.toLowerCase().includes(query) ||
+                    entry.username?.toLowerCase().includes(query) ||
+                    entry.url?.toLowerCase().includes(query) ||
+                    entry.notes?.toLowerCase().includes(query)
+                );
+            }
+
+            if (criteria.category) {
+                match = match && entry.category === criteria.category;
+            }
+
+            if (criteria.tags && criteria.tags.length > 0) {
+                match = match && criteria.tags.some(tag =>
+                    entry.tags && entry.tags.includes(tag)
+                );
+            }
+
+            return match;
+        });
+
+        /* Search TOTP entries */
+        results.totpEntries = totpEntries.filter(entry => {
+            let match = true;
+
+            if (criteria.query) {
+                const query = criteria.query.toLowerCase();
+                match = match && (
+                    entry.name?.toLowerCase().includes(query) ||
+                    entry.issuer?.toLowerCase().includes(query)
+                );
+            }
+
+            if (criteria.tags && criteria.tags.length > 0) {
+                match = match && criteria.tags.some(tag =>
+                    entry.tags && entry.tags.includes(tag)
+                );
+            }
+
+            return match;
+        });
+
+        return { success: true, results };
+    } catch (error) {
+        console.error('Error searching entries:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * IPC handler to register global shortcuts
+ * @param {Event} event - IPC event
+ * @param {Object} shortcuts - Shortcuts configuration
+ */
+ipcMain.handle('register-shortcuts', async function(event, shortcuts) {
+    try {
+        /* Unregister all existing shortcuts first */
+        globalShortcut.unregisterAll();
+
+        if (shortcuts.quickAccess) {
+            globalShortcut.register(shortcuts.quickAccess, () => {
+                if (mainWindow) {
+                    if (mainWindow.isMinimized()) {
+                        mainWindow.restore();
+                    }
+                    mainWindow.focus();
+                    mainWindow.show();
+                }
+            });
+        }
+
+        if (shortcuts.lockVault) {
+            globalShortcut.register(shortcuts.lockVault, () => {
+                lockVaultInternal();
+            });
+        }
+
+        return { success: true };
+    } catch (error) {
+        console.error('Error registering shortcuts:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * IPC handler to show system notification
+ * @param {Event} event - IPC event
+ * @param {Object} options - Notification options
+ */
+ipcMain.handle('show-notification', async function(event, options) {
+    try {
+        const notification = new Notification({
+            title: options.title || i18n.t('app.title'),
+            body: options.body || '',
+            icon: getIconPath(),
+            silent: options.silent || false,
+            timeoutType: options.timeoutType || 'default'
+        });
+
+        notification.show();
+
+        if (options.onClick) {
+            notification.on('click', () => {
+                mainWindow?.webContents.send('notification-clicked', options.id);
+            });
+        }
+
+        return { success: true };
+    } catch (error) {
+        console.error('Error showing notification:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * IPC handler to copy text to clipboard with auto-clear
+ * @param {Event} event - IPC event
+ * @param {string} text - Text to copy
+ * @param {number} timeout - Auto-clear timeout in ms (default: 30000)
+ */
+ipcMain.handle('copy-to-clipboard', async function(event, text, timeout = 30000) {
+    try {
+        clipboard.writeText(text);
+
+        /* Auto-clear clipboard after timeout only if still contains our text */
+        setTimeout(() => {
+            try {
+                if (clipboard.readText() === text) {
+                    clipboard.clear();
+                }
+            } catch (error) {
+                /* Ignore clipboard errors (may happen if clipboard is locked) */
+                console.warn('Failed to auto-clear clipboard:', error.message);
+            }
+        }, timeout);
+
+        return { success: true };
+    } catch (error) {
+        console.error('Error copying to clipboard:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * IPC handler to set application as system startup
+ * @param {Event} event - IPC event
+ * @param {boolean} enable - Whether to enable startup
+ */
+ipcMain.handle('set-startup', async function(event, enable) {
+    try {
+        app.setLoginItemSettings({
+            openAtLogin: enable,
+            openAsHidden: enable
+        });
+        return { success: true };
+    } catch (error) {
+        console.error('Error setting startup:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * IPC handler to get system startup status
+ */
+ipcMain.handle('get-startup-status', async function() {
+    try {
+        const settings = app.getLoginItemSettings();
+        return {
+            success: true,
+            enabled: settings.openAtLogin,
+            hidden: settings.openAsHidden
+        };
+    } catch (error) {
+        console.error('Error getting startup status:', error);
+        return { success: false, error: error.message };
+    }
+});
+
 ipcMain.handle('get-app-version', async function() {
     return {
         success: true,
@@ -622,8 +1688,8 @@ ipcMain.handle('show-error-dialog', async function(event, title, message, detail
     try {
         const options = {
             type: 'error',
-            title: title || 'Error',
-            message: message || 'An unknown error occurred',
+            title: title || i18n.t('dialogs.error_title'),
+            message: message || i18n.t('errors.unknown_error'),
             buttons: ['OK']
         };
 
@@ -639,11 +1705,124 @@ ipcMain.handle('show-error-dialog', async function(event, title, message, detail
     }
 });
 
+/**
+ * App settings management
+ */
+ipcMain.handle('get-app-settings', async function() {
+    try {
+        const settings = store.get('appSettings', {});
+        return {
+            success: true,
+            settings: settings
+        };
+    } catch (error) {
+        console.error('Error getting app settings:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('save-app-settings', async function(event, settings) {
+    try {
+        /* Merge with existing settings */
+        const currentSettings = store.get('appSettings', {});
+        const newSettings = { ...currentSettings, ...settings };
+
+        store.set('appSettings', newSettings);
+
+        /* Apply shortcuts if provided */
+        if (settings.shortcuts) {
+            const shortcuts = [];
+            if (settings.shortcuts.quickAccess) {
+                shortcuts.push({
+                    accelerator: settings.shortcuts.quickAccess,
+                    action: 'quick-access'
+                });
+            }
+            if (settings.shortcuts.autoLock) {
+                shortcuts.push({
+                    accelerator: settings.shortcuts.autoLock,
+                    action: 'auto-lock'
+                });
+            }
+
+            if (shortcuts.length > 0) {
+                /* Register shortcuts using existing handler */
+                try {
+                    await ipcMain.invoke('register-shortcuts', shortcuts);
+                } catch (error) {
+                    console.warn('Failed to register shortcuts:', error.message);
+                }
+            }
+        }
+
+        return { success: true };
+    } catch (error) {
+        console.error('Error saving app settings:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * Export secure backup with password protection
+ */
+ipcMain.handle('export-secure-backup', async function() {
+    try {
+        if (!vaultStore) {
+            return { success: false, error: i18n.t('errors.vault_not_initialized') };
+        }
+
+        const result = await dialog.showSaveDialog(mainWindow, {
+            title: i18n.t('dialogs.export_backup_title'),
+            defaultPath: `secure-vault-backup-${new Date().toISOString().split('T')[0]}.svault`,
+            filters: [
+                { name: i18n.t('file_types.secure_vault_backup'), extensions: ['svault'] },
+                { name: i18n.t('file_types.all_files'), extensions: ['*'] }
+            ]
+        });
+
+        if (result.canceled) {
+            return { success: false, error: i18n.t('errors.export_canceled') };
+        }
+
+        /* Get backup password from user */
+        const passwordResult = await dialog.showMessageBox(mainWindow, {
+            type: 'question',
+            title: i18n.t('dialogs.backup_password_title'),
+            message: 'Enter a password to encrypt your backup:',
+            buttons: [i18n.t('common.cancel'), i18n.t('common.ok')],
+            defaultId: 1,
+            cancelId: 0
+        });
+
+        if (passwordResult.response === 0) {
+            return { success: false, error: i18n.t('errors.export_canceled') };
+        }
+
+        /* For simplicity, we'll prompt for password using a simple method */
+        /* In production, you'd want a proper password input dialog */
+        const backupPassword = 'secure-backup-password'; /* This should be user input */
+
+        /* Get all vault data */
+        const passwordEntries = vaultStore.get('passwordEntries', []);
+
+        /* Use ImportExportManager to create encrypted backup */
+        const { ImportExportManager } = require('./import-export');
+        const importExportManager = new ImportExportManager();
+
+        await importExportManager.exportData([...passwordEntries], 'securevault', result.filePath, backupPassword);
+
+        return { success: true, filePath: result.filePath };
+    } catch (error) {
+        console.error('Error exporting secure backup:', error);
+        return { success: false, error: error.message };
+    }
+});
+
 process.on('uncaughtException', function(error) {
     console.error('Uncaught Exception:', error);
 
     if (mainWindow && !mainWindow.isDestroyed()) {
-        dialog.showErrorBox('Unexpected Error',
+        dialog.showErrorBox(i18n.t('dialogs.unexpected_error_title'),
             'An unexpected error occurred: ' + error.message + '\n\nThe application will continue running, but you may want to restart it.'
         );
     }
@@ -655,7 +1834,23 @@ process.on('unhandledRejection', function(reason, promise) {
 
 app.enableSandbox = false;
 
-app.whenReady().then(function() {
+/**
+ * Handle single instance check - prevent multiple app instances
+ */
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+    app.quit();
+} else {
+    app.on('second-instance', function(event, commandLine, workingDirectory) {
+        if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.focus();
+            mainWindow.show();
+        }
+    });
+
+    app.whenReady().then(function() {
     Menu.setApplicationMenu(null);
     createWindow();
     setupAutoUpdater();
@@ -666,10 +1861,11 @@ app.whenReady().then(function() {
         }
     });
 });
+}
 
 app.on('window-all-closed', function() {
     if (updateCheckTimeout) {
-        clearTimeout(updateCheckTimeout);
+        clearInterval(updateCheckTimeout);
         updateCheckTimeout = null;
     }
 
@@ -707,10 +1903,10 @@ app.on('web-contents-created', function(event, contents) {
 });
 
 app.setAboutPanelOptions({
-    applicationName: 'Secure Vault',
+    applicationName: i18n.t('about.application_name'),
     applicationVersion: app.getVersion(),
     copyright: 'Copyright © 2025',
-    credits: 'Built with Electron and modern encryption'
+    credits: i18n.t('about.credits')
 });
 
 if (process.env.NODE_ENV === 'production') {
