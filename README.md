@@ -1,6 +1,9 @@
-# Secure Vault
+# Secure Vault — Privacy-First Open Credential Management for the Open Internet
 
-A desktop password manager and two-factor authenticator built with Electron. Provides local data storage with AES-256 encryption and cross-platform compatibility for Windows, macOS, and Linux.
+A zero-knowledge, open-source desktop password manager and two-factor authenticator. Built with Electron, Secure Vault stores all credentials locally with AES-256 encryption — no cloud accounts, no subscriptions, no vendor lock-in. Cross-platform for Windows, macOS, and Linux.
+
+Licensed under the [EUPL-1.2](LICENSE).
+
 
 ## Features
 
@@ -206,9 +209,13 @@ npm run dev
 - **Import errors** - Check import file format and review error messages
 - **Export issues** - Verify disk space and file permissions
 
+## License
+
+Licensed under the [European Union Public Licence V. 1.2 (EUPL-1.2)](LICENSE).
+
 ## Credits
 
-**Developed by**: www.bavamont.com
+**Developed by**: [Bavamont](https://www.bavamont.com) — Füssen, Bavaria, Germany
 
 **Dependencies**:
 - Electron - Cross-platform desktop framework
